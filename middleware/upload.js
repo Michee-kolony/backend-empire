@@ -16,23 +16,33 @@ const TYPES_AUTORISES = {
     '.avif': 'image/avif'
 };
 
+// Documents : PDF en plus des images
+const TYPES_DOCUMENTS = { ...TYPES_AUTORISES, '.pdf': 'application/pdf' };
+const TAILLE_MAX_DOCUMENT = 10 * 1024 * 1024; // 10 Mo par fichier
+
+// Vérifie le format d'un fichier selon les types autorisés
+const verifierFormat = (file, types, formats) => {
+    const extension = path.extname(file.originalname).toLowerCase();
+    const mimeValide = Object.values(types).includes(file.mimetype);
+
+    // Certains clients (ex: Postman) envoient "application/octet-stream" : on se fie alors à l'extension
+    if (mimeValide || types[extension]) {
+        if (!mimeValide) file.mimetype = types[extension];
+        return null;
+    }
+
+    const erreur = new Error(`Format refusé pour "${file.fieldname}" (${file.mimetype}, ${extension || 'sans extension'}) : ${formats} uniquement`);
+    erreur.code = 'FORMAT_INVALIDE';
+    return erreur;
+};
+
 // Les fichiers restent en mémoire puis sont envoyés directement sur R2
 const multerConfig = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: TAILLE_MAX, files: MAX_PHOTOS },
     fileFilter: (req, file, cb) => {
-        const extension = path.extname(file.originalname).toLowerCase();
-        const mimeValide = Object.values(TYPES_AUTORISES).includes(file.mimetype);
-
-        // Certains clients (ex: Postman) envoient "application/octet-stream" : on se fie alors à l'extension
-        if (mimeValide || TYPES_AUTORISES[extension]) {
-            if (!mimeValide) file.mimetype = TYPES_AUTORISES[extension];
-            return cb(null, true);
-        }
-
-        const erreur = new Error(`Format refusé (${file.mimetype}, ${extension || 'sans extension'}) : JPEG, PNG, WEBP ou AVIF uniquement`);
-        erreur.code = 'FORMAT_INVALIDE';
-        cb(erreur);
+        const erreur = verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
+        erreur ? cb(erreur) : cb(null, true);
     }
 });
 
@@ -65,9 +75,9 @@ const supprimerDeR2 = async (urls) => {
 const gererErreurMulter = (error, res) => {
     if (error instanceof multer.MulterError) {
         const messages = {
-            LIMIT_FILE_SIZE: 'Une photo dépasse 5 Mo',
-            LIMIT_FILE_COUNT: `${MAX_PHOTOS} photos maximum`,
-            LIMIT_UNEXPECTED_FILE: `Champ fichier inattendu : "${error.field}". Vérifie le nom du champ du fichier dans ta requête`
+            LIMIT_FILE_SIZE: 'Fichier trop volumineux (5 Mo max par photo, 10 Mo max par document)',
+            LIMIT_FILE_COUNT: 'Trop de fichiers envoyés',
+            LIMIT_UNEXPECTED_FILE: `Champ fichier inattendu ou trop de fichiers pour "${error.field}". Vérifie le nom du champ et le nombre de fichiers`
         };
         return res.status(400).json({ success: false, message: messages[error.code] || error.message });
     }
@@ -111,6 +121,61 @@ const uploadPhoto = (dossier, champ = 'photo') => (req, res, next) => {
     });
 };
 
+// Middleware : reçoit plusieurs champs de fichiers et les envoie dans "<dossier>/<nom du champ>"
+// champs : [{ name: 'photos', maxCount: 5 }, { name: 'document', maxCount: 1, documents: true }]
+// (documents: true accepte aussi le PDF, sinon images uniquement)
+// Les URLs sont placées dans req.fichiers : { photos: [...], document: [...] } (tableau vide si rien n'est envoyé)
+const uploadFichiers = (dossier, champs) => {
+    const upload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: TAILLE_MAX_DOCUMENT },
+        fileFilter: (req, file, cb) => {
+            const champ = champs.find((c) => c.name === file.fieldname);
+            if (!champ) return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
+
+            const erreur = champ.documents
+                ? verifierFormat(file, TYPES_DOCUMENTS, 'PDF, JPEG, PNG, WEBP ou AVIF')
+                : verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
+            if (erreur) return cb(erreur);
+
+            // Les photos restent limitées à 5 Mo
+            file.estPhoto = !champ.documents;
+            cb(null, true);
+        }
+    }).fields(champs.map(({ name, maxCount }) => ({ name, maxCount })));
+
+    return (req, res, next) => {
+        upload(req, res, async (error) => {
+            if (error) return gererErreurMulter(error, res);
+
+            const photoTropLourde = Object.values(req.files || {}).flat()
+                .find((file) => file.estPhoto && file.size > TAILLE_MAX);
+            if (photoTropLourde) {
+                return res.status(400).json({ success: false, message: `La photo "${photoTropLourde.originalname}" dépasse 5 Mo` });
+            }
+
+            const envoyes = [];
+            try {
+                req.fichiers = {};
+                for (const { name } of champs) {
+                    const fichiers = (req.files && req.files[name]) || [];
+                    req.fichiers[name] = await Promise.all(fichiers.map(async (file) => {
+                        const url = await envoyerSurR2(file, `${dossier}/${name}`);
+                        envoyes.push(url);
+                        return url;
+                    }));
+                }
+                next();
+            } catch (erreur) {
+                // Envoi incomplet : on retire du bucket ce qui a déjà été envoyé
+                supprimerDeR2(envoyes).catch(() => {});
+                res.status(500).json({ success: false, message: "Échec de l'envoi des fichiers : " + erreur.message });
+            }
+        });
+    };
+};
+
 module.exports = uploadPhotos;
+module.exports.uploadFichiers = uploadFichiers;
 module.exports.uploadPhoto = uploadPhoto;
 module.exports.supprimerDeR2 = supprimerDeR2;
