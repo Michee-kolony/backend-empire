@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const gardienController = require('../controllers/gardien');
 const auth = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 const { uploadPhoto } = require('../middleware/upload');
 
 router.post('/inscription', auth, uploadPhoto('photo-gardien', 'photoProfil'), gardienController.inscription);
@@ -10,6 +11,6 @@ router.get('/', auth, gardienController.getAll);
 router.get('/:id', auth, gardienController.getById);
 router.patch('/:id/statut', auth, gardienController.changerStatut);
 router.post('/:id/commentaires', auth, uploadPhoto('photo-proprietaire', 'photoProprietaire'), gardienController.ajouterCommentaire);
-router.delete('/:id', auth, gardienController.supprimer);
+router.delete('/:id', auth, requireSuperAdmin, gardienController.supprimer);
 
 module.exports = router;

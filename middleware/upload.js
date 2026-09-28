@@ -1,7 +1,7 @@
 const multer = require('multer');
 const path = require('path');
 const crypto = require('crypto');
-const { PutObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { r2, R2_BUCKET, R2_PUBLIC_URL } = require('../config/r2');
 
 const MIN_PHOTOS = 1;
@@ -49,6 +49,16 @@ const envoyerSurR2 = async (file, dossier = 'photos') => {
     }));
 
     return `${R2_PUBLIC_URL}/${cle}`;
+};
+
+// Supprime de R2 les photos à partir de leurs URLs publiques
+// (les URLs qui ne pointent pas vers notre bucket sont ignorées)
+const supprimerDeR2 = async (urls) => {
+    const cles = urls
+        .filter((url) => url && url.startsWith(`${R2_PUBLIC_URL}/`))
+        .map((url) => url.slice(R2_PUBLIC_URL.length + 1));
+
+    await Promise.all(cles.map((cle) => r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: cle }))));
 };
 
 // Transforme une erreur multer en réponse 400 lisible
@@ -103,3 +113,4 @@ const uploadPhoto = (dossier, champ = 'photo') => (req, res, next) => {
 
 module.exports = uploadPhotos;
 module.exports.uploadPhoto = uploadPhoto;
+module.exports.supprimerDeR2 = supprimerDeR2;

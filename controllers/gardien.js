@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Gardien = require('../models/gardien');
 const { JWT_SECRET } = require('../middleware/auth');
+const { supprimerDeR2 } = require('../middleware/upload');
 
 const CHAMPS_OBLIGATOIRES = [
     'nom', 'postnom', 'prenom', 'sexe', 'dateNaissance', 'lieuNaissance',
@@ -197,6 +198,14 @@ exports.supprimer = async (req, res) => {
         const gardien = await Gardien.findByIdAndDelete(id);
         if (!gardien) {
             return res.status(404).json({ success: false, message: 'Gardien introuvable' });
+        }
+
+        // Supprime aussi du bucket sa photo de profil et les photos des propriétaires dans ses commentaires
+        const photos = [gardien.photoProfil, ...gardien.commentaires.map((c) => c.photoProprietaire)];
+        try {
+            await supprimerDeR2(photos);
+        } catch (erreur) {
+            console.error('Suppression des photos R2 échouée :', erreur.message);
         }
 
         res.status(200).json({ success: true, message: 'Gardien supprimé avec succès' });
