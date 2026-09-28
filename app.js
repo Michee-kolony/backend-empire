@@ -33,6 +33,7 @@ app.get('/', (req, res) => {
 // Routes
 app.use('/api/admins', require('./routes/admin'));
 app.use('/api/gardiens', require('./routes/gardien'));
+app.use('/api/proprietaires', require('./routes/proprietaire'));
 
 // Route introuvable
 app.use((req, res) => {
