@@ -1,9 +1,10 @@
 const mongoose = require('mongoose');
 const Propriete = require('../models/propriete');
+const Proprietaire = require('../models/proprietaire');
 const { supprimerDeR2 } = require('../middleware/upload');
 
 const CHAMPS_TEXTE = [
-    'proprietaire', 'nomReference', 'typeAutre', 'numeroParcelle',
+    'nomReference', 'typeAutre', 'numeroParcelle',
     'commune', 'quartier', 'avenue', 'numero', 'referenceComplementaire', 'lienCarte',
     'autresInformations', 'autresEquipementsSecurite'
 ];
@@ -32,9 +33,23 @@ const ouiNon = (valeur) => {
     return valeur;
 };
 
+// Erreur renvoyée telle quelle au client avec un statut 400
+const erreur400 = (message) => Object.assign(new Error(message), { statut: 400 });
+
+// Vérifie que l'id du propriétaire est valide et qu'il existe en base
+const verifierProprietaire = async (id) => {
+    if (!mongoose.Types.ObjectId.isValid(id)) throw erreur400('Identifiant de propriétaire invalide');
+    if (!(await Proprietaire.exists({ _id: id }))) throw erreur400('Propriétaire introuvable');
+};
+
 // Construit les données de la propriété à partir des champs envoyés (seuls les champs présents sont pris)
-const lireChamps = (body) => {
+const lireChamps = async (body) => {
     const data = {};
+
+    if (body.proprietaire !== undefined) {
+        await verifierProprietaire(body.proprietaire);
+        data.proprietaire = body.proprietaire;
+    }
 
     CHAMPS_TEXTE.forEach((champ) => {
         if (body[champ] !== undefined) data[champ] = body[champ];
@@ -69,6 +84,9 @@ const fichiersDe = (propriete) => [
 ];
 
 const repondreErreur = (error, res) => {
+    if (error.statut) {
+        return res.status(error.statut).json({ success: false, message: error.message });
+    }
     if (error.name === 'ValidationError' || error.name === 'CastError') {
         return res.status(400).json({ success: false, message: error.message });
     }
@@ -81,6 +99,9 @@ exports.ajouter = async (req, res) => {
     const annulerFichiers = () => supprimerDeR2(fichiersEnvoyes(req)).catch(() => {});
 
     try {
+        // Vérifie d'abord le propriétaire référencé (id valide et existant en base)
+        const data = await lireChamps(req.body);
+
         const manquants = CHAMPS_OBLIGATOIRES.filter((champ) => !req.body[champ]);
         if (manquants.length) {
             annulerFichiers();
@@ -88,12 +109,13 @@ exports.ajouter = async (req, res) => {
         }
 
         const propriete = new Propriete();
-        propriete.set(lireChamps(req.body));
+        propriete.set(data);
         propriete.photos = req.fichiers.photos;
         propriete.documentPropriete = req.fichiers.documentPropriete[0] || null;
         propriete.autresDocuments = req.fichiers.autresDocuments;
 
         await propriete.save();
+        await propriete.populate('proprietaire', '-password');
 
         res.status(201).json({ success: true, message: 'Propriété ajoutée avec succès', propriete });
     } catch (error) {
@@ -105,7 +127,7 @@ exports.ajouter = async (req, res) => {
 // Récupérer toutes les propriétés
 exports.getAll = async (req, res) => {
     try {
-        const proprietes = await Propriete.find().sort({ createdAt: -1 });
+        const proprietes = await Propriete.find().populate('proprietaire', '-password').sort({ createdAt: -1 });
 
         res.status(200).json({ success: true, total: proprietes.length, proprietes });
     } catch (error) {
@@ -122,7 +144,7 @@ exports.getById = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Identifiant invalide' });
         }
 
-        const propriete = await Propriete.findById(id);
+        const propriete = await Propriete.findById(id).populate('proprietaire', '-password');
         if (!propriete) {
             return res.status(404).json({ success: false, message: 'Propriété introuvable' });
         }
@@ -153,7 +175,7 @@ exports.modifier = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Propriété introuvable' });
         }
 
-        propriete.set(lireChamps(req.body));
+        propriete.set(await lireChamps(req.body));
 
         const anciensFichiers = [];
         if (req.fichiers.photos.length) {
@@ -177,6 +199,8 @@ exports.modifier = async (req, res) => {
         } catch (erreur) {
             console.error('Suppression des anciens fichiers R2 échouée :', erreur.message);
         }
+
+        await propriete.populate('proprietaire', '-password');
 
         res.status(200).json({ success: true, message: 'Propriété modifiée avec succès', propriete });
     } catch (error) {

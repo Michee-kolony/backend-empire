@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const proprieteSchema = new mongoose.Schema(
     {
-        // Nom du propriétaire de cette propriété
-        proprietaire: { type: String, required: true, trim: true },
+        // Propriétaire de cette propriété (compte Proprietaire)
+        proprietaire: { type: mongoose.Schema.Types.ObjectId, ref: 'Proprietaire', required: true },
 
         // Identification de la propriété
         nomReference: { type: String, required: true, trim: true },
