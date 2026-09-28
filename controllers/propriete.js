@@ -13,8 +13,10 @@ const CHAMPS_CHOIX = ['typePropriete', 'niveauSecurite'];
 
 const CHAMPS_NOMBRE = [
     'nombreBatiments', 'nombreNiveaux', 'nombreChambres', 'nombrePortesAcces',
-    'nombreVehicules', 'nombreCameras'
+    'nombreVehicules', 'nombreCameras', 'prixAbonnement'
 ];
+
+const CHAMPS_DATE = ['dateDebutAbonnement', 'dateExpirationAbonnement'];
 
 const CHAMPS_OUI_NON = ['cloture', 'portail', 'garage', 'cameras', 'alarme', 'eclairageSecurite', 'interphone'];
 
@@ -41,6 +43,9 @@ const lireChamps = (body) => {
         if (body[champ] !== undefined) data[champ] = sansAccents(body[champ]);
     });
     CHAMPS_NOMBRE.forEach((champ) => {
+        if (body[champ] !== undefined) data[champ] = body[champ] === '' ? null : body[champ];
+    });
+    CHAMPS_DATE.forEach((champ) => {
         if (body[champ] !== undefined) data[champ] = body[champ] === '' ? null : body[champ];
     });
     CHAMPS_OUI_NON.forEach((champ) => {

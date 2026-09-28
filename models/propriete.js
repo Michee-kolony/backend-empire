@@ -62,6 +62,20 @@ const proprieteSchema = new mongoose.Schema(
         interphone: { type: Boolean, default: false },
         autresEquipementsSecurite: { type: String, trim: true, default: '' },
 
+        // Abonnement
+        prixAbonnement: { type: Number, min: 0, default: null },
+        dateDebutAbonnement: { type: Date, default: null },
+        dateExpirationAbonnement: {
+            type: Date,
+            default: null,
+            validate: {
+                validator: function (dateExpiration) {
+                    return !dateExpiration || !this.dateDebutAbonnement || dateExpiration > this.dateDebutAbonnement;
+                },
+                message: "La date d'expiration doit être après la date de début de l'abonnement"
+            }
+        },
+
         // Documents / preuves (URLs dans le bucket)
         photos: {
             type: [String],
