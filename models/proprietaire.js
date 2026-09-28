@@ -62,6 +62,8 @@ const proprietaireSchema = new mongoose.Schema(
        enum: [
         'PROPRIETAIRE',
         'GESTIONNAIRE',
+        'MANDATAIRE',
+        'LOCATAIRE',
     ],
     default: 'PROPRIETAIRE'
 },
