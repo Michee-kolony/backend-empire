@@ -9,12 +9,14 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1141.0",
     "bcrypt": "^6.0.0",
     "body-parser": "^2.3.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.10.2",
+    "multer": "^2.4.0",
     "nodemon": "^3.1.14",
     "socket.io": "^4.8.4"
   }

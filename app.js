@@ -32,6 +32,7 @@ app.get('/', (req, res) => {
 
 // Routes
 app.use('/api/admins', require('./routes/admin'));
+app.use('/api/gardiens', require('./routes/gardien'));
 
 // Route introuvable
 app.use((req, res) => {
