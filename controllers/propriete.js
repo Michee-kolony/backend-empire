@@ -14,7 +14,7 @@ const CHAMPS_CHOIX = ['typePropriete', 'niveauSecurite'];
 
 const CHAMPS_NOMBRE = [
     'nombreBatiments', 'nombreNiveaux', 'nombreChambres', 'nombrePortesAcces',
-    'nombreVehicules', 'nombreCameras', 'prixAbonnement'
+    'nombreVehicules', 'nombreCameras'
 ];
 
 const CHAMPS_DATE = ['dateDebutAbonnement', 'dateExpirationAbonnement'];

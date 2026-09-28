@@ -63,7 +63,6 @@ const proprieteSchema = new mongoose.Schema(
         autresEquipementsSecurite: { type: String, trim: true, default: '' },
 
         // Abonnement
-        prixAbonnement: { type: Number, min: 0, default: null },
         dateDebutAbonnement: { type: Date, default: null },
         dateExpirationAbonnement: {
             type: Date,
