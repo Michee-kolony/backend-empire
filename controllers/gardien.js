@@ -222,6 +222,35 @@ exports.changerStatut = async (req, res) => {
     }
 };
 
+// Le gardien connecté met à jour SA position (id pris dans son token, pas dans l'URL)
+exports.mettreAJourPosition = async (req, res) => {
+    try {
+        if (req.admin.role !== 'GARDIEN') {
+            return res.status(403).json({ success: false, message: 'Action réservée aux gardiens' });
+        }
+
+        const lat = Number(req.body.lat);
+        const lng = Number(req.body.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+            return res.status(400).json({ success: false, message: 'Position invalide : lat et lng sont obligatoires' });
+        }
+
+        const gardien = await Gardien.findByIdAndUpdate(
+            req.admin.id,
+            { 'coordonnees.lat': lat, 'coordonnees.lng': lng },
+            { new: true }
+        ).select('coordonnees');
+
+        if (!gardien) {
+            return res.status(404).json({ success: false, message: 'Gardien introuvable' });
+        }
+
+        res.status(200).json({ success: true, coordonnees: gardien.coordonnees });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 // Ajouter un commentaire sur un gardien (photo du propriétaire dans le champ "photoProprietaire")
 exports.ajouterCommentaire = async (req, res) => {
     try {

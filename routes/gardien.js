@@ -7,6 +7,7 @@ const { uploadPhoto } = require('../middleware/upload');
 
 router.post('/inscription', auth, uploadPhoto('photo-gardien', 'photoProfil'), gardienController.inscription);
 router.post('/login', gardienController.login);
+router.patch('/position', auth, gardienController.mettreAJourPosition);
 router.get('/', auth, gardienController.getAll);
 router.get('/:id', auth, gardienController.getById);
 router.put('/:id', auth, requireSuperAdmin, uploadPhoto('photo-gardien', 'photoProfil'), gardienController.modifier);
