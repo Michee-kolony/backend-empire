@@ -18,6 +18,16 @@ const proprietaireSchema = new mongoose.Schema(
             trim: true
         },
 
+        sexe: {
+            type: String,
+            enum: ['M', 'F']
+        },
+
+        profession: {
+            type: String,
+            trim: true
+        },
+
         telephone: {
             type: String,
             required: true,

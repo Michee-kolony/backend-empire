@@ -8,7 +8,7 @@ const { supprimerDeR2 } = require('../middleware/upload');
 const ROLES_ADMIN = ['ADMIN', 'SUPER_ADMIN'];
 
 // Champs qu'un propriétaire peut modifier lui-même
-const CHAMPS_MODIFIABLES = ['nom', 'postnom', 'prenom', 'telephone', 'email', 'adresse'];
+const CHAMPS_MODIFIABLES = ['nom', 'postnom', 'prenom', 'sexe', 'profession', 'telephone', 'email', 'adresse'];
 
 // Champs réservés aux administrateurs
 const CHAMPS_ADMIN = ['role', 'actif'];
@@ -25,7 +25,7 @@ exports.inscription = async (req, res) => {
     const annulerPhoto = () => req.photo && supprimerDeR2([req.photo]).catch(() => {});
 
     try {
-        const { nom, postnom, prenom, telephone, password, adresse } = req.body;
+        const { nom, postnom, prenom, sexe, profession, telephone, password, adresse } = req.body;
         const email = nettoyerEmail(req.body.email);
 
         if (!nom || !telephone || !password) {
@@ -45,7 +45,7 @@ exports.inscription = async (req, res) => {
         const hash = await bcrypt.hash(password, 10);
 
         const proprietaire = await Proprietaire.create({
-            nom, postnom, prenom, telephone, email, adresse,
+            nom, postnom, prenom, sexe, profession, telephone, email, adresse,
             password: hash,
             photo: req.photo || null
         });
