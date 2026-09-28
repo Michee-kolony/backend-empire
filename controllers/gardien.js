@@ -7,7 +7,7 @@ const { supprimerDeR2 } = require('../middleware/upload');
 
 const CHAMPS_OBLIGATOIRES = [
     'nom', 'postnom', 'prenom', 'sexe', 'dateNaissance', 'lieuNaissance',
-    'nationalite', 'etatCivil', 'telephonePrincipal', 'email', 'password',
+    'nationalite', 'etatCivil', 'taille', 'telephonePrincipal', 'email', 'password',
     'adresseActuelle', 'commune', 'quartier', 'avenue'
 ];
 
@@ -24,7 +24,7 @@ exports.inscription = async (req, res) => {
         }
 
         const {
-            nom, postnom, prenom, sexe, dateNaissance, lieuNaissance, nationalite, etatCivil,
+            nom, postnom, prenom, sexe, dateNaissance, lieuNaissance, nationalite, etatCivil, taille,
             telephonePrincipal, telephoneSecondaire, email, password,
             adresseActuelle, commune, quartier, avenue, statut, lat, lng
         } = req.body;
@@ -37,7 +37,7 @@ exports.inscription = async (req, res) => {
         const hash = await bcrypt.hash(password, 10);
 
         const gardien = await Gardien.create({
-            nom, postnom, prenom, sexe, dateNaissance, lieuNaissance, nationalite, etatCivil,
+            nom, postnom, prenom, sexe, dateNaissance, lieuNaissance, nationalite, etatCivil, taille,
             photoProfil: req.photo,
             telephonePrincipal, telephoneSecondaire,
             email, password: hash,
@@ -121,6 +121,78 @@ exports.getById = async (req, res) => {
 
         res.status(200).json({ success: true, gardien });
     } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const CHAMPS_MODIFIABLES = [
+    'nom', 'postnom', 'prenom', 'sexe', 'dateNaissance', 'lieuNaissance', 'nationalite', 'etatCivil', 'taille',
+    'telephonePrincipal', 'telephoneSecondaire', 'email',
+    'adresseActuelle', 'commune', 'quartier', 'avenue', 'statut'
+];
+
+// Modifier un gardien (multipart/form-data, nouvelle photo de profil facultative dans le champ "photoProfil")
+// Seuls les champs envoyés sont modifiés. Si une nouvelle photo est envoyée, l'ancienne est supprimée du bucket.
+exports.modifier = async (req, res) => {
+    // En cas d'échec, la nouvelle photo déjà envoyée sur R2 est supprimée
+    const annulerPhoto = () => req.photo && supprimerDeR2([req.photo]).catch(() => {});
+
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            annulerPhoto();
+            return res.status(400).json({ success: false, message: 'Identifiant invalide' });
+        }
+
+        const gardien = await Gardien.findById(id);
+        if (!gardien) {
+            annulerPhoto();
+            return res.status(404).json({ success: false, message: 'Gardien introuvable' });
+        }
+
+        if (req.body.email && req.body.email.toLowerCase().trim() !== gardien.email) {
+            const existe = await Gardien.findOne({ email: req.body.email.toLowerCase().trim() });
+            if (existe) {
+                annulerPhoto();
+                return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé' });
+            }
+        }
+
+        CHAMPS_MODIFIABLES.forEach((champ) => {
+            if (req.body[champ] !== undefined) gardien[champ] = req.body[champ];
+        });
+
+        if (req.body.password) {
+            gardien.password = await bcrypt.hash(req.body.password, 10);
+        }
+
+        if (req.body.lat !== undefined) gardien.coordonnees.lat = req.body.lat !== '' ? Number(req.body.lat) : null;
+        if (req.body.lng !== undefined) gardien.coordonnees.lng = req.body.lng !== '' ? Number(req.body.lng) : null;
+
+        const anciennePhoto = gardien.photoProfil;
+        if (req.photo) gardien.photoProfil = req.photo;
+
+        await gardien.save();
+
+        // La modification est enregistrée : on peut supprimer l'ancienne photo du bucket
+        if (req.photo && anciennePhoto !== req.photo) {
+            try {
+                await supprimerDeR2([anciennePhoto]);
+            } catch (erreur) {
+                console.error("Suppression de l'ancienne photo R2 échouée :", erreur.message);
+            }
+        }
+
+        const data = gardien.toObject();
+        delete data.password;
+
+        res.status(200).json({ success: true, message: 'Gardien modifié avec succès', gardien: data });
+    } catch (error) {
+        annulerPhoto();
+        if (error.name === 'ValidationError' || error.name === 'CastError') {
+            return res.status(400).json({ success: false, message: error.message });
+        }
         res.status(500).json({ success: false, message: error.message });
     }
 };

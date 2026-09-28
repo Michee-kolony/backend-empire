@@ -57,6 +57,13 @@ const gardienSchema = new mongoose.Schema(
             required: true
         },
 
+        // Taille en centimètres (ex : 178)
+        taille: {
+            type: Number,
+            min: [100, 'La taille doit être d\'au moins 100 cm'],
+            max: [250, 'La taille ne peut pas dépasser 250 cm']
+        },
+
         photoProfil: { type: String, required: true },
 
         // Contact

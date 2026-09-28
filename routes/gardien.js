@@ -9,6 +9,7 @@ router.post('/inscription', auth, uploadPhoto('photo-gardien', 'photoProfil'), g
 router.post('/login', gardienController.login);
 router.get('/', auth, gardienController.getAll);
 router.get('/:id', auth, gardienController.getById);
+router.put('/:id', auth, uploadPhoto('photo-gardien', 'photoProfil'), gardienController.modifier);
 router.patch('/:id/statut', auth, gardienController.changerStatut);
 router.post('/:id/commentaires', auth, uploadPhoto('photo-proprietaire', 'photoProprietaire'), gardienController.ajouterCommentaire);
 router.delete('/:id', auth, requireSuperAdmin, gardienController.supprimer);
