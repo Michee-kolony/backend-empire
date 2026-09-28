@@ -1,0 +1,93 @@
+# Dépendances
+node_modules/
+jspm_packages/
+bower_components/
+.pnp
+.pnp.js
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Variables d'environnement
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Rapports et données d'exécution
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Tests et couverture de code
+coverage/
+.nyc_output/
+*.lcov
+junit.xml
+
+# Build et fichiers générés
+dist/
+build/
+out/
+tmp/
+temp/
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# Caches des outils
+.npm/
+.eslintcache
+.stylelintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# Fichiers uploadés par les utilisateurs
+uploads/
+
+# Certificats et clés
+*.pem
+*.key
+*.crt
+*.p12
+
+# Bases de données locales
+*.sqlite
+*.sqlite3
+*.db
+
+# Éditeurs et IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Claude Code (réglages locaux)
+.claude/settings.local.json
+
+# Systèmes d'exploitation
+.DS_Store
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
