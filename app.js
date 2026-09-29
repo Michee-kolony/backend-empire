@@ -35,6 +35,7 @@ app.use('/api/admins', require('./routes/admin'));
 app.use('/api/gardiens', require('./routes/gardien'));
 app.use('/api/proprietaires', require('./routes/proprietaire'));
 app.use('/api/proprietes', require('./routes/propriete'));
+app.use('/api/paiements', require('./routes/paiement'));
 
 // Route introuvable
 app.use((req, res) => {
