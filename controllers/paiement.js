@@ -27,10 +27,17 @@ const verifierIdentifiant = (id, res, libelle = 'Identifiant') => {
     return true;
 };
 
-const peuplerPaiement = (requete) => requete
+const peuplerRequetePaiement = (requete) => requete
     .populate('propriete')
     .populate('proprietaire', '-password')
     .populate('adminEnregistreur', '-password');
+
+const peuplerDocumentPaiement = async (paiement) => {
+    await paiement.populate('propriete');
+    await paiement.populate('proprietaire', '-password');
+    await paiement.populate('adminEnregistreur', '-password');
+    return paiement;
+};
 
 const trouverPropriete = async (id) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -91,7 +98,7 @@ exports.ajouter = async (req, res) => {
         data.adminEnregistreur = req.admin.id;
 
         const paiement = await Paiement.create(data);
-        await peuplerPaiement(paiement);
+        await peuplerDocumentPaiement(paiement);
         return res.status(201).json({ success: true, message: 'Paiement enregistré avec succès', paiement });
     } catch (error) {
         return repondreErreurCreation(error, res);
@@ -107,7 +114,7 @@ exports.getAll = async (req, res) => {
                 filtre[champ] = req.query[champ];
             }
         }
-        const paiements = await peuplerPaiement(Paiement.find(filtre).sort({ createdAt: -1 }));
+        const paiements = await peuplerRequetePaiement(Paiement.find(filtre).sort({ createdAt: -1 }));
         return res.status(200).json({ success: true, total: paiements.length, paiements });
     } catch (error) {
         return repondreErreur(error, res);
@@ -117,7 +124,7 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
     try {
         if (!verifierIdentifiant(req.params.id, res)) return;
-        const paiement = await peuplerPaiement(Paiement.findById(req.params.id));
+        const paiement = await peuplerRequetePaiement(Paiement.findById(req.params.id));
         if (!paiement) {
             return res.status(404).json({ success: false, message: 'Paiement introuvable' });
         }
@@ -145,7 +152,7 @@ exports.modifier = async (req, res) => {
         });
 
         await paiement.save();
-        await peuplerPaiement(paiement);
+        await peuplerDocumentPaiement(paiement);
         return res.status(200).json({ success: true, message: 'Paiement modifié avec succès', paiement });
     } catch (error) {
         return repondreErreurCreation(error, res);
