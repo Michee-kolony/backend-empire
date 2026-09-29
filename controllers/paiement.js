@@ -5,7 +5,7 @@ const Proprietaire = require('../models/proprietaire');
 const Administrateur = require('../models/admin');
 
 const CHAMPS_MODIFIABLES = [
-    'montant', 'devise', 'modePaiement', 'datePaiement',
+    'montant', 'devise', 'modePaiement',
     'periodeDebut', 'periodeFin', 'description'
 ];
 
@@ -107,7 +107,7 @@ exports.getAll = async (req, res) => {
                 filtre[champ] = req.query[champ];
             }
         }
-        const paiements = await peuplerPaiement(Paiement.find(filtre).sort({ datePaiement: -1, createdAt: -1 }));
+        const paiements = await peuplerPaiement(Paiement.find(filtre).sort({ createdAt: -1 }));
         return res.status(200).json({ success: true, total: paiements.length, paiements });
     } catch (error) {
         return repondreErreur(error, res);

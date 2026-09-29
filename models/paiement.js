@@ -29,7 +29,6 @@ const paiementSchema = new mongoose.Schema(
             enum: ['especes', 'mobile_money', 'virement', 'carte', 'cheque', 'autre'],
             required: true
         },
-        datePaiement: { type: Date, default: Date.now, required: true },
         referenceTransaction: {
             type: String,
             unique: true,
