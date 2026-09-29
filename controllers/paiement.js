@@ -5,11 +5,14 @@ const Proprietaire = require('../models/proprietaire');
 const Administrateur = require('../models/admin');
 
 const CHAMPS_MODIFIABLES = [
-    'montant', 'devise', 'modePaiement', 'statut', 'datePaiement',
-    'referenceTransaction', 'periodeDebut', 'periodeFin', 'description'
+    'montant', 'devise', 'modePaiement', 'datePaiement',
+    'periodeDebut', 'periodeFin', 'description'
 ];
 
 const repondreErreur = (error, res) => {
+    if (error.code === 11000) {
+        return res.status(409).json({ success: false, message: 'Cette référence de reçu existe déjà' });
+    }
     if (error.name === 'ValidationError' || error.name === 'CastError') {
         return res.status(400).json({ success: false, message: error.message });
     }
@@ -104,8 +107,6 @@ exports.getAll = async (req, res) => {
                 filtre[champ] = req.query[champ];
             }
         }
-        if (req.query.statut !== undefined) filtre.statut = req.query.statut;
-
         const paiements = await peuplerPaiement(Paiement.find(filtre).sort({ datePaiement: -1, createdAt: -1 }));
         return res.status(200).json({ success: true, total: paiements.length, paiements });
     } catch (error) {

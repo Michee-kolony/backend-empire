@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { randomUUID } = require('node:crypto');
 
 const paiementSchema = new mongoose.Schema(
     {
@@ -28,16 +29,13 @@ const paiementSchema = new mongoose.Schema(
             enum: ['especes', 'mobile_money', 'virement', 'carte', 'cheque', 'autre'],
             required: true
         },
-        statut: {
-            type: String,
-            lowercase: true,
-            trim: true,
-            enum: ['paye', 'partiel', 'en_attente', 'annule', 'rembourse'],
-            default: 'paye',
-            required: true
-        },
         datePaiement: { type: Date, default: Date.now, required: true },
-        referenceTransaction: { type: String, trim: true, default: '' },
+        referenceTransaction: {
+            type: String,
+            unique: true,
+            immutable: true,
+            default: () => `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomUUID().toUpperCase()}`
+        },
         periodeDebut: { type: Date, default: null },
         periodeFin: {
             type: Date,
