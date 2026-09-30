@@ -19,6 +19,8 @@ const TYPES_AUTORISES = {
 // Documents : PDF en plus des images
 const TYPES_DOCUMENTS = { ...TYPES_AUTORISES, '.pdf': 'application/pdf' };
 const TAILLE_MAX_DOCUMENT = 10 * 1024 * 1024; // 10 Mo par fichier
+// Ces limites doivent rester sous client_max_body_size de nginx (deploy/nginx-backend-empire.conf)
+// et identiques à celles du frontend (gardinnage/src/app/core/proprietes.service.ts)
 
 // Vérifie le format d'un fichier selon les types autorisés
 const verifierFormat = (file, types, formats) => {
