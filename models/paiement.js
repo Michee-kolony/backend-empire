@@ -35,17 +35,30 @@ const paiementSchema = new mongoose.Schema(
             immutable: true,
             default: () => `REC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${randomUUID().toUpperCase()}`
         },
-        periodeDebut: { type: Date, default: null },
-        periodeFin: {
-            type: Date,
-            default: null,
+
+        // Durée de l'abonnement payé (en mois) : elle fixe la période couverte par ce paiement
+        dureeMois: {
+            type: Number,
+            required: true,
+            min: [1, 'La durée doit être d\'au moins 1 mois'],
             validate: {
-                validator: function (dateFin) {
-                    return !dateFin || !this.periodeDebut || dateFin >= this.periodeDebut;
-                },
-                message: 'La fin de période doit être postérieure ou égale au début'
+                validator: Number.isInteger,
+                message: 'La durée doit être un nombre entier de mois'
             }
         },
+        // Période couverte, calculée par le serveur : periodeFin = periodeDebut + dureeMois
+        periodeDebut: { type: Date, required: true },
+        periodeFin: {
+            type: Date,
+            required: true,
+            validate: {
+                validator: function (dateFin) {
+                    return !this.periodeDebut || dateFin > this.periodeDebut;
+                },
+                message: 'La fin de période doit être postérieure au début'
+            }
+        },
+
         description: { type: String, trim: true, default: '' },
         adminEnregistreur: {
             type: mongoose.Schema.Types.ObjectId,
@@ -56,5 +69,7 @@ const paiementSchema = new mongoose.Schema(
     },
     { timestamps: true }
 );
+
+paiementSchema.index({ propriete: 1, periodeFin: -1 });
 
 module.exports = mongoose.model('Paiement', paiementSchema);

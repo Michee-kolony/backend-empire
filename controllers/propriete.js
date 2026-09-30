@@ -17,8 +17,6 @@ const CHAMPS_NOMBRE = [
     'nombreVehicules', 'nombreCameras'
 ];
 
-const CHAMPS_DATE = ['dateDebutAbonnement', 'dateExpirationAbonnement'];
-
 const CHAMPS_OUI_NON = ['cloture', 'portail', 'garage', 'cameras', 'alarme', 'eclairageSecurite', 'interphone'];
 
 const CHAMPS_OBLIGATOIRES = ['proprietaire', 'nomReference', 'typePropriete', 'commune', 'quartier', 'avenue'];
@@ -60,9 +58,8 @@ const lireChamps = async (body) => {
     CHAMPS_NOMBRE.forEach((champ) => {
         if (body[champ] !== undefined) data[champ] = body[champ] === '' ? null : body[champ];
     });
-    CHAMPS_DATE.forEach((champ) => {
-        if (body[champ] !== undefined) data[champ] = body[champ] === '' ? null : body[champ];
-    });
+    // dateDebutAbonnement / dateExpirationAbonnement sont ignorées ici :
+    // elles ne changent qu'à l'enregistrement d'un paiement
     CHAMPS_OUI_NON.forEach((champ) => {
         if (body[champ] !== undefined) data[champ] = ouiNon(body[champ]);
     });

@@ -62,7 +62,9 @@ const proprieteSchema = new mongoose.Schema(
         interphone: { type: Boolean, default: false },
         autresEquipementsSecurite: { type: String, trim: true, default: '' },
 
-        // Abonnement
+        // Abonnement : ces dates ne sont jamais saisies directement,
+        // elles sont fixées par le paiement qui couvre la période (voir controllers/paiement.js)
+        dernierPaiement: { type: mongoose.Schema.Types.ObjectId, ref: 'Paiement', default: null },
         dateDebutAbonnement: { type: Date, default: null },
         dateExpirationAbonnement: {
             type: Date,
@@ -87,8 +89,16 @@ const proprieteSchema = new mongoose.Schema(
         autresDocuments: { type: [String], default: [] }
     },
     {
-        timestamps: true
+        timestamps: true,
+        toJSON: { virtuals: true },
+        toObject: { virtuals: true }
     }
 );
+
+// "actif" : abonnement en cours ; "expire" : date d'expiration dépassée ; "aucun" : jamais payé
+proprieteSchema.virtual('statutAbonnement').get(function () {
+    if (!this.dateExpirationAbonnement) return 'aucun';
+    return this.dateExpirationAbonnement > new Date() ? 'actif' : 'expire';
+});
 
 module.exports = mongoose.model('Propriete', proprieteSchema);
