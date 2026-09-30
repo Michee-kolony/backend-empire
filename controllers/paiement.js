@@ -168,6 +168,12 @@ exports.ajouter = async (req, res) => {
             );
         }
 
+        paiement.abonnementPrecedent = {
+            dateDebut: avant.dateDebutAbonnement,
+            dateExpiration: avant.dateExpirationAbonnement,
+            paiement: avant.dernierPaiement
+        };
+
         try {
             await paiement.save();
         } catch (error) {
@@ -258,13 +264,15 @@ exports.modifier = async (req, res) => {
         const periodeDebut = lireDateDebut(req.body.periodeDebut, paiement.periodeDebut);
         const periodeFin = ajouterMois(periodeDebut, dureeMois);
 
-        const precedent = await Paiement.findOne({ propriete: paiement.propriete, _id: { $ne: paiement._id } })
-            .sort({ periodeFin: -1 })
-            .select('periodeFin');
-        if (precedent && periodeDebut < precedent.periodeFin) {
+        const finPrecedente = paiement.abonnementPrecedent
+            ? paiement.abonnementPrecedent.dateExpiration
+            : (await Paiement.findOne({ propriete: paiement.propriete, _id: { $ne: paiement._id }, dureeMois: { $exists: true } })
+                .sort({ periodeFin: -1 })
+                .select('periodeFin'))?.periodeFin;
+        if (finPrecedente && periodeDebut < finPrecedente) {
             throw erreur(
                 400,
-                `La date de début doit être postérieure ou égale à la fin du précédent abonnement (${formaterDate(precedent.periodeFin)})`
+                `La date de début doit être postérieure ou égale à la fin du précédent abonnement (${formaterDate(finPrecedente)})`
             );
         }
 
@@ -285,8 +293,28 @@ exports.modifier = async (req, res) => {
     }
 };
 
+// Abonnement à remettre sur la propriété quand ce paiement est supprimé
+const abonnementAvant = async (paiement) => {
+    if (paiement.abonnementPrecedent) {
+        return {
+            dernierPaiement: paiement.abonnementPrecedent.paiement,
+            dateDebutAbonnement: paiement.abonnementPrecedent.dateDebut,
+            dateExpirationAbonnement: paiement.abonnementPrecedent.dateExpiration
+        };
+    }
+    // Paiement enregistré avant l'ajout de abonnementPrecedent : on reprend le paiement précédent
+    // créé avec une durée (les anciens paiements sans durée ont des périodes saisies à la main, non fiables)
+    const precedent = await Paiement.findOne({ propriete: paiement.propriete, dureeMois: { $exists: true } })
+        .sort({ periodeFin: -1 });
+    return {
+        dernierPaiement: precedent ? precedent._id : null,
+        dateDebutAbonnement: precedent ? precedent.periodeDebut : null,
+        dateExpirationAbonnement: precedent ? precedent.periodeFin : null
+    };
+};
+
 // Supprimer un paiement. S'il portait l'abonnement actuel de la propriété,
-// celle-ci reprend la période du paiement précédent (ou n'a plus d'abonnement).
+// celle-ci retrouve exactement l'abonnement qu'elle avait avant ce paiement (actif, expiré ou aucun).
 exports.supprimer = async (req, res) => {
     try {
         if (!verifierIdentifiant(req.params.id, res)) return;
@@ -295,16 +323,15 @@ exports.supprimer = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Paiement introuvable' });
         }
 
-        const precedent = await Paiement.findOne({ propriete: paiement.propriete }).sort({ periodeFin: -1 });
         await Propriete.updateOne(
             { _id: paiement.propriete, dernierPaiement: paiement._id },
-            {
-                $set: {
-                    dernierPaiement: precedent ? precedent._id : null,
-                    dateDebutAbonnement: precedent ? precedent.periodeDebut : null,
-                    dateExpirationAbonnement: precedent ? precedent.periodeFin : null
-                }
-            }
+            { $set: await abonnementAvant(paiement) }
+        );
+
+        // Le paiement suivant qui pointait sur celui-ci hérite de son abonnement précédent
+        await Paiement.updateMany(
+            { 'abonnementPrecedent.paiement': paiement._id },
+            { $set: { abonnementPrecedent: paiement.abonnementPrecedent } }
         );
 
         return res.status(200).json({ success: true, message: 'Paiement supprimé avec succès' });

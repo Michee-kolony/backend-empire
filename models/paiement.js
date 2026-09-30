@@ -59,6 +59,20 @@ const paiementSchema = new mongoose.Schema(
             }
         },
 
+        // Abonnement de la propriété juste avant ce paiement : remis tel quel si ce paiement est supprimé
+        // (null pour les paiements enregistrés avant l'ajout de ce champ)
+        abonnementPrecedent: {
+            type: new mongoose.Schema(
+                {
+                    dateDebut: { type: Date, default: null },
+                    dateExpiration: { type: Date, default: null },
+                    paiement: { type: mongoose.Schema.Types.ObjectId, ref: 'Paiement', default: null }
+                },
+                { _id: false }
+            ),
+            default: null
+        },
+
         description: { type: String, trim: true, default: '' },
         adminEnregistreur: {
             type: mongoose.Schema.Types.ObjectId,
