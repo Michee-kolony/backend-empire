@@ -50,4 +50,45 @@ const horairesSeChevauchent = (a, b) => {
             debutA < finB + decalage && debutB + decalage < finA)));
 };
 
-module.exports = { JOURS, normaliserHeure, normaliserJours, horairesSeChevauchent };
+// Les horaires (18:00…) sont en heure locale. Décalage par rapport à UTC, en minutes :
+// Kinshasa = +60 (UTC+1, sans heure d'été). À changer avec la variable d'environnement DECALAGE_HORAIRE_MINUTES.
+const DECALAGE_MINUTES = Number(process.env.DECALAGE_HORAIRE_MINUTES ?? 60);
+
+// Jour local d'un instant : "AAAA-MM-JJ"
+const jourLocal = (date) => new Date(new Date(date).getTime() + DECALAGE_MINUTES * 60000).toISOString().slice(0, 10);
+
+// Instant correspondant à un jour local "AAAA-MM-JJ" et une heure locale "HH:mm"
+const instantLocal = (jour, heure = '00:00') => new Date(Date.parse(`${jour}T${heure}:00Z`) - DECALAGE_MINUTES * 60000);
+
+// "AAAA-MM-JJ" + n jours
+const decalerJour = (jour, n) => new Date(Date.parse(`${jour}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+
+// Nom du jour de la semaine d'un jour local ("lundi"…)
+const nomJour = (jour) => JOURS[(new Date(`${jour}T00:00:00Z`).getUTCDay() + 6) % 7];
+
+// Service prévu par une affectation pour un jour local donné, ou null si le gardien ne travaille pas ce jour-là
+// (jour non coché, ou en dehors de la période de l'affectation).
+// Renvoie { jourService, debutPrevu, finPrevue } ; le service peut finir le lendemain (18:00 -> 06:00).
+const servicePrevu = (affectation, jour) => {
+    const jours = affectation.joursService?.length ? affectation.joursService : JOURS;
+    if (!jours.includes(nomJour(jour))) return null;
+
+    const heureDebut = affectation.heureDebut || '00:00';
+    const heureFin = affectation.heureFin || '00:00';
+    const debut = enMinutes(heureDebut);
+    const fin = enMinutes(heureFin);
+    const duree = fin > debut ? fin - debut : fin + MINUTES_JOUR - debut;
+
+    const debutPrevu = instantLocal(jour, heureDebut);
+    const finPrevue = new Date(debutPrevu.getTime() + duree * 60000);
+    if (finPrevue <= affectation.dateDebut || debutPrevu >= affectation.dateFin) return null;
+    return { jourService: jour, debutPrevu, finPrevue };
+};
+
+// Heure locale d'un instant : "HH:mm"
+const heureLocale = (date) => new Date(new Date(date).getTime() + DECALAGE_MINUTES * 60000).toISOString().slice(11, 16);
+
+module.exports = {
+    JOURS, normaliserHeure, normaliserJours, horairesSeChevauchent,
+    jourLocal, instantLocal, decalerJour, heureLocale, servicePrevu
+};

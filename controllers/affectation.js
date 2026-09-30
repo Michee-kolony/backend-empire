@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Affectation = require('../models/affectation');
 const Propriete = require('../models/propriete');
+require('../models/proprietaire'); // pour afficher le propriétaire de la propriété
 const Gardien = require('../models/gardien');
 const Administrateur = require('../models/admin');
 const { ajouterDuree, formaterDate } = require('../utils/dates');
