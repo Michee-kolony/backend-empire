@@ -10,7 +10,8 @@ router.get('/mes-affectations', auth, affectationController.mesAffectations);
 router.get('/:id', auth, affectationController.getById);
 router.put('/:id', auth, requireAdmin, affectationController.modifier);
 router.patch('/:id/principal', auth, requireAdmin, affectationController.definirPrincipal);
-router.patch('/:id/terminer', auth, requireAdmin, affectationController.terminer);
+router.patch('/:id/retirer', auth, requireAdmin, affectationController.retirer);
+router.post('/:id/remplacer', auth, requireAdmin, affectationController.remplacer);
 router.delete('/:id', auth, requireAdmin, affectationController.supprimer);
 
 module.exports = router;

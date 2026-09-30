@@ -7,7 +7,11 @@ const app = express();
 
 // Connexion à MongoDB
 mongoose.connect('mongodb://micheekolony71%40gmail.com:1708roosevelt@187.7.27.156:27017/empire?authSource=admin')
-    .then(() => console.log('Connexion à MongoDB réussie ✅'))
+    .then(async () => {
+        console.log('Connexion à MongoDB réussie ✅');
+        await require('./models/affectation').migrerAnciennesAffectations()
+            .catch((error) => console.error('Migration des affectations échouée :', error.message));
+    })
     .catch((error) => console.error('Connexion à MongoDB échouée ❌ :', error.message));
 
 // CORS : autorise les requêtes venant du frontend
