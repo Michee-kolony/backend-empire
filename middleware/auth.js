@@ -28,6 +28,15 @@ const requireSuperAdmin = (req, res, next) => {
     next();
 };
 
+// À utiliser après `auth` : réservé aux administrateurs (ADMIN ou SUPER_ADMIN)
+const requireAdmin = (req, res, next) => {
+    if (!req.admin || !['ADMIN', 'SUPER_ADMIN'].includes(req.admin.role)) {
+        return res.status(403).json({ success: false, message: 'Action réservée aux administrateurs' });
+    }
+    next();
+};
+
 module.exports = auth;
+module.exports.requireAdmin = requireAdmin;
 module.exports.JWT_SECRET = JWT_SECRET;
 module.exports.requireSuperAdmin = requireSuperAdmin;

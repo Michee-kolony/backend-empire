@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const Affectation = require('../models/affectation');
 const Gardien = require('../models/gardien');
 const { JWT_SECRET } = require('../middleware/auth');
 const { supprimerDeR2 } = require('../middleware/upload');
@@ -300,6 +301,9 @@ exports.supprimer = async (req, res) => {
         if (!gardien) {
             return res.status(404).json({ success: false, message: 'Gardien introuvable' });
         }
+
+        // Ses affectations n'ont plus de sens sans lui
+        await Affectation.deleteMany({ gardien: gardien._id });
 
         // Supprime aussi du bucket sa photo de profil et les photos des propriétaires dans ses commentaires
         const photos = [gardien.photoProfil, ...gardien.commentaires.map((c) => c.photoProprietaire)];

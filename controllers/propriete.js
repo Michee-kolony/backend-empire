@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const Affectation = require('../models/affectation');
 const Propriete = require('../models/propriete');
 const Proprietaire = require('../models/proprietaire');
 const { supprimerDeR2 } = require('../middleware/upload');
@@ -219,6 +220,9 @@ exports.supprimer = async (req, res) => {
         if (!propriete) {
             return res.status(404).json({ success: false, message: 'Propriété introuvable' });
         }
+
+        // Ses affectations n'ont plus de sens sans elle
+        await Affectation.deleteMany({ propriete: propriete._id });
 
         try {
             await supprimerDeR2(fichiersDe(propriete));

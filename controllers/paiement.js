@@ -3,6 +3,7 @@ const Paiement = require('../models/paiement');
 const Propriete = require('../models/propriete');
 const Proprietaire = require('../models/proprietaire');
 const Administrateur = require('../models/admin');
+const { ajouterMois, formaterDate } = require('../utils/dates');
 
 // Champs libres : ils ne touchent pas à la période d'abonnement
 const CHAMPS_MODIFIABLES = ['montant', 'devise', 'modePaiement', 'description'];
@@ -40,19 +41,6 @@ const peuplerDocumentPaiement = async (paiement) => {
     await paiement.populate('proprietaire', '-password');
     await paiement.populate('adminEnregistreur', '-password');
     return paiement;
-};
-
-const formaterDate = (date) => new Date(date).toLocaleDateString('fr-FR', { timeZone: 'UTC' });
-
-// Ajoute des mois à une date (le 31 janvier + 1 mois donne le 28/29 février)
-const ajouterMois = (date, mois) => {
-    const resultat = new Date(date);
-    const jour = resultat.getUTCDate();
-    resultat.setUTCDate(1);
-    resultat.setUTCMonth(resultat.getUTCMonth() + mois);
-    const dernierJour = new Date(Date.UTC(resultat.getUTCFullYear(), resultat.getUTCMonth() + 1, 0)).getUTCDate();
-    resultat.setUTCDate(Math.min(jour, dernierJour));
-    return resultat;
 };
 
 const lireDuree = (valeur) => {
