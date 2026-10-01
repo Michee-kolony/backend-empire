@@ -19,6 +19,16 @@ const TYPES_AUTORISES = {
 // Documents : PDF en plus des images
 const TYPES_DOCUMENTS = { ...TYPES_AUTORISES, '.pdf': 'application/pdf' };
 const TAILLE_MAX_DOCUMENT = 10 * 1024 * 1024; // 10 Mo par fichier
+
+// Vidéos (incidents)
+const TYPES_VIDEOS = {
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/x-m4v',
+    '.mov': 'video/quicktime',
+    '.webm': 'video/webm',
+    '.3gp': 'video/3gpp'
+};
+const TAILLE_MAX_VIDEO = 30 * 1024 * 1024; // 30 Mo par vidéo
 // Ces limites doivent rester sous client_max_body_size de nginx (deploy/nginx-backend-empire.conf)
 // et identiques à celles du frontend (gardinnage/src/app/core/proprietes.service.ts)
 
@@ -77,7 +87,7 @@ const supprimerDeR2 = async (urls) => {
 const gererErreurMulter = (error, res) => {
     if (error instanceof multer.MulterError) {
         const messages = {
-            LIMIT_FILE_SIZE: 'Fichier trop volumineux (5 Mo max par photo, 10 Mo max par document)',
+            LIMIT_FILE_SIZE: 'Fichier trop volumineux (5 Mo max par photo, 10 Mo max par document, 30 Mo max par vidéo)',
             LIMIT_FILE_COUNT: 'Trop de fichiers envoyés',
             LIMIT_UNEXPECTED_FILE: `Champ fichier inattendu ou trop de fichiers pour "${error.field}". Vérifie le nom du champ et le nombre de fichiers`
         };
@@ -125,24 +135,28 @@ const uploadPhoto = (dossier, champ = 'photo') => (req, res, next) => {
 
 // Middleware : reçoit plusieurs champs de fichiers et les envoie dans "<dossier>/<nom du champ>"
 // champs : [{ name: 'photos', maxCount: 5 }, { name: 'document', maxCount: 1, documents: true }]
-// (documents: true accepte aussi le PDF, sinon images uniquement)
+// (documents: true accepte aussi le PDF, videos: true accepte uniquement des vidéos, sinon images uniquement)
 // Les URLs sont placées dans req.fichiers : { photos: [...], document: [...] } (tableau vide si rien n'est envoyé)
 const uploadFichiers = (dossier, champs) => {
     const upload = multer({
         storage: multer.memoryStorage(),
-        limits: { fileSize: TAILLE_MAX_DOCUMENT },
+        limits: { fileSize: champs.some((c) => c.videos) ? TAILLE_MAX_VIDEO : TAILLE_MAX_DOCUMENT },
         fileFilter: (req, file, cb) => {
             const champ = champs.find((c) => c.name === file.fieldname);
             if (!champ) return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
 
-            const erreur = champ.documents
-                ? verifierFormat(file, TYPES_DOCUMENTS, 'PDF, JPEG, PNG, WEBP ou AVIF')
-                : verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
-            if (erreur) return cb(erreur);
-
-            // Les photos restent limitées à 5 Mo
-            file.estPhoto = !champ.documents;
-            cb(null, true);
+            let erreur;
+            if (champ.videos) {
+                erreur = verifierFormat(file, TYPES_VIDEOS, 'MP4, MOV, WEBM ou 3GP');
+                file.tailleMax = TAILLE_MAX_VIDEO;
+            } else if (champ.documents) {
+                erreur = verifierFormat(file, TYPES_DOCUMENTS, 'PDF, JPEG, PNG, WEBP ou AVIF');
+                file.tailleMax = TAILLE_MAX_DOCUMENT;
+            } else {
+                erreur = verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
+                file.tailleMax = TAILLE_MAX;
+            }
+            erreur ? cb(erreur) : cb(null, true);
         }
     }).fields(champs.map(({ name, maxCount }) => ({ name, maxCount })));
 
@@ -150,10 +164,11 @@ const uploadFichiers = (dossier, champs) => {
         upload(req, res, async (error) => {
             if (error) return gererErreurMulter(error, res);
 
-            const photoTropLourde = Object.values(req.files || {}).flat()
-                .find((file) => file.estPhoto && file.size > TAILLE_MAX);
-            if (photoTropLourde) {
-                return res.status(400).json({ success: false, message: `La photo "${photoTropLourde.originalname}" dépasse 5 Mo` });
+            // La limite de multer est la plus large : on vérifie ici la limite propre à chaque type de fichier
+            const tropLourd = Object.values(req.files || {}).flat().find((file) => file.size > file.tailleMax);
+            if (tropLourd) {
+                const limite = tropLourd.tailleMax / (1024 * 1024);
+                return res.status(400).json({ success: false, message: `Le fichier "${tropLourd.originalname}" dépasse ${limite} Mo` });
             }
 
             const envoyes = [];

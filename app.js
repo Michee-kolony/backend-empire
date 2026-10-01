@@ -43,6 +43,7 @@ app.use('/api/paiements', require('./routes/paiement'));
 app.use('/api/affectations', require('./routes/affectation'));
 app.use('/api/presences', require('./routes/presence'));
 app.use('/api/rapports', require('./routes/rapport'));
+app.use('/api/incidents', require('./routes/incident'));
 
 // Route introuvable
 app.use((req, res) => {
