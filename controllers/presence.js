@@ -145,6 +145,8 @@ const calculerAbsences = async (criteres) => {
 
     return prevus
         .filter((p) => !dejaPointes.has(`${p.affectation._id}|${p.jourService}`))
+        // Un service déjà terminé quand le gardien a été affecté n'est pas une absence
+        .filter((p) => !p.affectation.createdAt || p.finPrevue > p.affectation.createdAt)
         .filter((p) => p.debutPrevu.getTime() + TOLERANCE_RETARD_MINUTES * 60000 < maintenant.getTime())
         .map((p) => ({
             etat: p.finPrevue <= maintenant ? 'absent' : 'pas encore arrive',

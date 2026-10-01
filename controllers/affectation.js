@@ -5,7 +5,7 @@ require('../models/proprietaire'); // pour afficher le propriétaire de la propr
 const Gardien = require('../models/gardien');
 const Administrateur = require('../models/admin');
 const { ajouterDuree, formaterDate } = require('../utils/dates');
-const { normaliserHeure, normaliserJours, horairesSeChevauchent } = require('../utils/horaires');
+const { normaliserHeure, normaliserJours, horairesSeChevauchent, jourLocal } = require('../utils/horaires');
 
 // Champs renvoyés dans une affectation (avec les photos du gardien et de la propriété)
 const CHAMPS_GARDIEN = 'matricule nom postnom prenom sexe photoProfil telephonePrincipal telephoneSecondaire statut';
@@ -150,6 +150,7 @@ const cloturer = (affectation, { motif, adminId, remplacePar = null }) => {
 // Affecter un gardien à une propriété (JSON)
 // Body : propriete, gardien, duree, heureDebut, heureFin,
 //        [uniteDuree = "mois"], [dateDebut = aujourd'hui], [joursService = tous les jours], [role], [description]
+// dateDebut (AAAA-MM-JJ) : l'affectation couvre tout ce jour-là, y compris aujourd'hui
 exports.ajouter = async (req, res) => {
     try {
         const { propriete: proprieteId, gardien: gardienId } = req.body;
@@ -162,7 +163,9 @@ exports.ajouter = async (req, res) => {
         const maintenant = new Date();
         const duree = lireDuree(req.body.duree);
         const uniteDuree = lireUnite(req.body.uniteDuree ?? 'mois');
-        const dateDebut = lireDateDebut(req.body.dateDebut, maintenant);
+        // Sans date choisie : début du jour (même valeur que si l'admin choisit la date du jour),
+        // pour que le service d'aujourd'hui compte même s'il a déjà commencé
+        const dateDebut = lireDateDebut(req.body.dateDebut, new Date(jourLocal(maintenant)));
         const dateFin = ajouterDuree(dateDebut, duree, uniteDuree);
         if (dateFin <= maintenant) {
             throw erreur(400, 'Cette affectation serait déjà expirée : vérifiez la date de début et la durée');
