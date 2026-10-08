@@ -12,6 +12,10 @@ const AVANCE_MAX_MINUTES = Number(process.env.PRESENCE_AVANCE_MAX_MINUTES ?? 60)
 const TOLERANCE_RETARD_MINUTES = Number(process.env.PRESENCE_TOLERANCE_RETARD_MINUTES ?? 15); // au-delà : "en retard"
 const RAYON_ZONE_METRES = Number(process.env.PRESENCE_RAYON_ZONE_METRES ?? 200); // au-delà : "hors zone"
 const PERIODE_MAX_JOURS = 366;
+// Pointage libre (tests) : le gardien peut commencer à n'importe quelle heure son prochain service non pointé
+// (7 jours). Mettre PRESENCE_POINTAGE_LIBRE=false pour revenir à la fenêtre normale (1 h avant -> fin prévue).
+const POINTAGE_LIBRE = process.env.PRESENCE_POINTAGE_LIBRE !== 'false';
+const JOURS_POINTAGE_LIBRE = 7;
 
 const CHAMPS_GARDIEN = 'matricule nom postnom prenom photoProfil telephonePrincipal statut';
 const CHAMPS_PROPRIETE = 'nomReference commune quartier avenue numero photos coordonnees proprietaire';
@@ -180,21 +184,26 @@ const mettreAJourGardien = (gardienId, statut, position) => Gardien.updateOne(
     { $set: { statut, 'coordonnees.lat': position.lat, 'coordonnees.lng': position.lng } }
 );
 
-// Services que le gardien peut commencer maintenant (fenêtre : de 1 h avant le début jusqu'à la fin prévue)
+// Services que le gardien peut commencer maintenant (fenêtre : de 1 h avant le début jusqu'à la fin prévue ;
+// en pointage libre : tout service pas encore fini dans les 7 prochains jours, du plus proche au plus lointain)
 const servicesPointables = async (gardienId, maintenant) => {
     const aujourdHui = jourLocal(maintenant);
+    const joursApres = POINTAGE_LIBRE ? JOURS_POINTAGE_LIBRE : 1;
     const affectations = await Affectation.find({
         gardien: gardienId,
-        dateDebut: { $lt: new Date(maintenant.getTime() + 2 * 86400000) },
+        dateDebut: { $lt: new Date(maintenant.getTime() + (joursApres + 1) * 86400000) },
         dateFin: { $gt: new Date(maintenant.getTime() - 2 * 86400000) }
     }).populate('propriete', 'nomReference coordonnees');
 
+    const jours = [];
+    for (let i = -1; i <= joursApres; i++) jours.push(decalerJour(aujourdHui, i));
+
     const candidats = [];
     for (const aff of affectations) {
-        for (const jour of [decalerJour(aujourdHui, -1), aujourdHui, decalerJour(aujourdHui, 1)]) {
+        for (const jour of jours) {
             const service = servicePrevu(aff, jour);
             if (service
-                && maintenant.getTime() >= service.debutPrevu.getTime() - AVANCE_MAX_MINUTES * 60000
+                && (POINTAGE_LIBRE || maintenant.getTime() >= service.debutPrevu.getTime() - AVANCE_MAX_MINUTES * 60000)
                 && maintenant < service.finPrevue) {
                 candidats.push({ ...service, affectation: aff });
             }
@@ -203,12 +212,31 @@ const servicesPointables = async (gardienId, maintenant) => {
     return candidats;
 };
 
-// Prochains services du gardien (7 jours), pour l'application du gardien
+const clePointage = (s) => `${s.affectation._id ?? s.affectation}|${s.jourService}`;
+
+// Clés "affectation|jour" des services déjà pointés parmi ceux donnés
+const clesPointees = async (services) => {
+    if (!services.length) return new Set();
+    const pointes = await Presence.find({
+        $or: services.map((s) => ({ affectation: s.affectation._id, jourService: s.jourService }))
+    }).select('affectation jourService');
+    return new Set(pointes.map(clePointage));
+};
+
+// Retire les services déjà pointés (même affectation, même jour)
+const nonPointes = async (services) => {
+    const cles = await clesPointees(services);
+    return services.filter((s) => !cles.has(clePointage(s)));
+};
+
+// Prochains services du gardien (7 jours), pour l'application du gardien.
+// Un service déjà pointé reste affiché ("effectue") jusqu'à son heure de fin prévue.
 const prochainsServices = async (gardienId, maintenant, nombre = 5) => {
     const aujourdHui = jourLocal(maintenant);
-    const prevus = await servicesPrevus({ du: decalerJour(aujourdHui, -1), au: decalerJour(aujourdHui, 7), gardien: gardienId });
+    const prevus = (await servicesPrevus({ du: decalerJour(aujourdHui, -1), au: decalerJour(aujourdHui, 7), gardien: gardienId }))
+        .filter((p) => p.finPrevue > maintenant);
+    const cles = await clesPointees(prevus);
     return prevus
-        .filter((p) => p.finPrevue > maintenant)
         .sort((a, b) => a.debutPrevu - b.debutPrevu)
         .slice(0, nombre)
         .map((p) => ({
@@ -217,7 +245,8 @@ const prochainsServices = async (gardienId, maintenant, nombre = 5) => {
             finPrevue: p.finPrevue,
             role: p.affectation.role,
             affectation: p.affectation._id,
-            propriete: p.affectation.propriete
+            propriete: p.affectation.propriete,
+            effectue: cles.has(clePointage(p))
         }));
 };
 
@@ -259,10 +288,11 @@ exports.commencer = async (req, res) => {
         candidats = candidats.filter((c) => !cles.has(`${c.affectation._id}|${c.jourService}`));
         if (!candidats.length) throw erreur(409, 'Ce service a déjà été effectué');
 
-        // Plusieurs services possibles : celui de la propriété la plus proche
+        // Plusieurs services possibles : celui de la propriété la plus proche, puis le plus tôt
         const choisi = candidats
             .map((c) => ({ ...c, position: positionPres(position, c.affectation.propriete) }))
-            .sort((a, b) => (a.position.distanceMetres ?? Infinity) - (b.position.distanceMetres ?? Infinity))[0];
+            .sort((a, b) => ((a.position.distanceMetres ?? Infinity) - (b.position.distanceMetres ?? Infinity))
+                || (a.debutPrevu - b.debutPrevu))[0];
 
         const retardMinutes = Math.max(0, minutesEntre(choisi.debutPrevu, maintenant));
         const presence = await Presence.create({
@@ -324,7 +354,7 @@ exports.monService = async (req, res) => {
         const maintenant = new Date();
         const enCours = await Presence.findOne({ gardien: req.admin.id, heureDepart: null }).sort({ heureArrivee: -1 });
         if (enCours) await peupler(enCours);
-        const pointables = await servicesPointables(req.admin.id, maintenant);
+        const pointables = await nonPointes(await servicesPointables(req.admin.id, maintenant));
 
         return res.status(200).json({
             success: true,

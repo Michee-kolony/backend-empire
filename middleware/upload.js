@@ -6,19 +6,37 @@ const { r2, R2_BUCKET, R2_PUBLIC_URL } = require('../config/r2');
 
 const MIN_PHOTOS = 1;
 const MAX_PHOTOS = 5;
-const TAILLE_MAX = 5 * 1024 * 1024; // 5 Mo par photo
-// Extensions autorisées et leur type MIME
+const TAILLE_MAX = 20 * 1024 * 1024; // 20 Mo par photo
+// Extensions autorisées et leur type MIME (tous les formats d'image courants sauf le GIF)
 const TYPES_AUTORISES = {
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
+    '.jpe': 'image/jpeg',
+    '.jfif': 'image/jpeg',
     '.png': 'image/png',
     '.webp': 'image/webp',
-    '.avif': 'image/avif'
+    '.avif': 'image/avif',
+    '.heic': 'image/heic', // photos iPhone
+    '.heif': 'image/heif',
+    '.bmp': 'image/bmp',
+    '.tif': 'image/tiff',
+    '.tiff': 'image/tiff'
 };
+// Variantes de type MIME envoyées par certains navigateurs / téléphones pour ces mêmes formats
+const MIME_ALTERNATIFS = {
+    'image/pjpeg': 'image/jpeg',
+    'image/jpg': 'image/jpeg',
+    'image/x-png': 'image/png',
+    'image/heic-sequence': 'image/heic',
+    'image/heif-sequence': 'image/heif',
+    'image/x-ms-bmp': 'image/bmp',
+    'image/x-bmp': 'image/bmp'
+};
+const FORMATS_IMAGES = 'JPEG, PNG, WEBP, AVIF, HEIC, HEIF, BMP ou TIFF (GIF refusé)';
 
 // Documents : PDF en plus des images
 const TYPES_DOCUMENTS = { ...TYPES_AUTORISES, '.pdf': 'application/pdf' };
-const TAILLE_MAX_DOCUMENT = 10 * 1024 * 1024; // 10 Mo par fichier
+const TAILLE_MAX_DOCUMENT = 20 * 1024 * 1024; // 20 Mo par fichier
 
 // Vidéos (incidents)
 const TYPES_VIDEOS = {
@@ -35,6 +53,7 @@ const TAILLE_MAX_VIDEO = 30 * 1024 * 1024; // 30 Mo par vidéo
 // Vérifie le format d'un fichier selon les types autorisés
 const verifierFormat = (file, types, formats) => {
     const extension = path.extname(file.originalname).toLowerCase();
+    if (MIME_ALTERNATIFS[file.mimetype]) file.mimetype = MIME_ALTERNATIFS[file.mimetype];
     const mimeValide = Object.values(types).includes(file.mimetype);
 
     // Certains clients (ex: Postman) envoient "application/octet-stream" : on se fie alors à l'extension
@@ -53,7 +72,7 @@ const multerConfig = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: TAILLE_MAX, files: MAX_PHOTOS },
     fileFilter: (req, file, cb) => {
-        const erreur = verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
+        const erreur = verifierFormat(file, TYPES_AUTORISES, FORMATS_IMAGES);
         erreur ? cb(erreur) : cb(null, true);
     }
 });
@@ -87,7 +106,7 @@ const supprimerDeR2 = async (urls) => {
 const gererErreurMulter = (error, res) => {
     if (error instanceof multer.MulterError) {
         const messages = {
-            LIMIT_FILE_SIZE: 'Fichier trop volumineux (5 Mo max par photo, 10 Mo max par document, 30 Mo max par vidéo)',
+            LIMIT_FILE_SIZE: 'Fichier trop volumineux (20 Mo max par photo ou document, 30 Mo max par vidéo)',
             LIMIT_FILE_COUNT: 'Trop de fichiers envoyés',
             LIMIT_UNEXPECTED_FILE: `Champ fichier inattendu ou trop de fichiers pour "${error.field}". Vérifie le nom du champ et le nombre de fichiers`
         };
@@ -140,7 +159,7 @@ const uploadPhoto = (dossier, champ = 'photo') => (req, res, next) => {
 const uploadFichiers = (dossier, champs) => {
     const upload = multer({
         storage: multer.memoryStorage(),
-        limits: { fileSize: champs.some((c) => c.videos) ? TAILLE_MAX_VIDEO : TAILLE_MAX_DOCUMENT },
+        limits: { fileSize: Math.max(TAILLE_MAX, TAILLE_MAX_DOCUMENT, champs.some((c) => c.videos) ? TAILLE_MAX_VIDEO : 0) },
         fileFilter: (req, file, cb) => {
             const champ = champs.find((c) => c.name === file.fieldname);
             if (!champ) return cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname));
@@ -150,10 +169,10 @@ const uploadFichiers = (dossier, champs) => {
                 erreur = verifierFormat(file, TYPES_VIDEOS, 'MP4, MOV, WEBM ou 3GP');
                 file.tailleMax = TAILLE_MAX_VIDEO;
             } else if (champ.documents) {
-                erreur = verifierFormat(file, TYPES_DOCUMENTS, 'PDF, JPEG, PNG, WEBP ou AVIF');
+                erreur = verifierFormat(file, TYPES_DOCUMENTS, `PDF, ${FORMATS_IMAGES}`);
                 file.tailleMax = TAILLE_MAX_DOCUMENT;
             } else {
-                erreur = verifierFormat(file, TYPES_AUTORISES, 'JPEG, PNG, WEBP ou AVIF');
+                erreur = verifierFormat(file, TYPES_AUTORISES, FORMATS_IMAGES);
                 file.tailleMax = TAILLE_MAX;
             }
             erreur ? cb(erreur) : cb(null, true);

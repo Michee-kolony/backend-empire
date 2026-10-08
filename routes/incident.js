@@ -6,7 +6,7 @@ const { requireAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { uploadFichiers } = require('../middleware/upload');
 
 // Fichiers stockés dans le bucket : incident/photos, incident/videos
-// (5 × 5 Mo + 2 × 30 Mo : reste sous client_max_body_size de nginx)
+// (5 × 20 Mo + 2 × 30 Mo : reste sous client_max_body_size de nginx)
 const uploadIncident = uploadFichiers('incident', [
     { name: 'photos', maxCount: 5 },
     { name: 'videos', maxCount: 2, videos: true }
