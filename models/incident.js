@@ -82,7 +82,16 @@ const incidentSchema = new mongoose.Schema(
         statut: { type: String, enum: Object.keys(STATUTS), default: 'nouveau' },
         traitePar: { type: mongoose.Schema.Types.ObjectId, ref: 'Administrateur', default: null },
         traiteLe: { type: Date, default: null },
-        commentaireAdmin: { type: String, trim: true, default: '' }
+        commentaireAdmin: { type: String, trim: true, default: '' },
+
+        // Suivi par le propriétaire de la propriété (il peut aussi faire avancer le statut)
+        traiteParProprietaire: { type: mongoose.Schema.Types.ObjectId, ref: 'Proprietaire', default: null },
+        commentaireProprietaire: {
+            type: String,
+            trim: true,
+            default: '',
+            maxlength: [2000, 'Le commentaire ne peut pas dépasser 2000 caractères']
+        }
     },
     {
         timestamps: true,

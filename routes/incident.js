@@ -21,7 +21,8 @@ router.get('/mes-incidents', auth, incidentController.mesIncidents);
 // Entreprise (admin)
 router.get('/', auth, requireAdmin, incidentController.getAll);
 router.get('/:id', auth, incidentController.getById);
-router.patch('/:id', auth, requireAdmin, incidentController.traiter);
+// Admin, ou propriétaire pour les incidents de ses propriétés (contrôle dans le contrôleur)
+router.patch('/:id', auth, incidentController.traiter);
 router.delete('/:id', auth, requireSuperAdmin, incidentController.supprimer);
 
 module.exports = router;

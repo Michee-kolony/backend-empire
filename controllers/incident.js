@@ -36,7 +36,8 @@ const peupler = (cible) => cible.populate([
     { path: 'signalePar', select: '-password' },
     { path: 'gardien', select: CHAMPS_GARDIEN },
     { path: 'propriete', select: CHAMPS_PROPRIETE, populate: { path: 'proprietaire', select: 'nom postnom prenom telephone' } },
-    { path: 'traitePar', select: '-password' }
+    { path: 'traitePar', select: '-password' },
+    { path: 'traiteParProprietaire', select: 'nom postnom prenom' }
 ]);
 
 // Lit une valeur d'une liste (sans tenir compte des accents, de la casse ni des espaces)
@@ -256,8 +257,12 @@ exports.getById = async (req, res) => {
     }
 };
 
-// Traitement par l'entreprise (admin). Body : [statut], [gravite], [commentaireAdmin]
+// Traitement d'un incident.
+// - Admin : Body [statut], [gravite], [commentaireAdmin]
+// - Propriétaire (incident d'une de ses propriétés) : Body [statut], [commentaireProprietaire]
 exports.traiter = async (req, res) => {
+    if (estProprietaire(req)) return traiterParProprietaire(req, res);
+    if (!estAdmin(req)) return res.status(403).json({ success: false, message: 'Accès refusé' });
     try {
         verifierIdentifiant(req.params.id);
         if (!mongoose.Types.ObjectId.isValid(req.admin.id) || !(await Administrateur.exists({ _id: req.admin.id }))) {
@@ -274,10 +279,43 @@ exports.traiter = async (req, res) => {
         if (statut !== undefined) {
             incident.statut = lireValeur(statut, Incident.STATUTS, 'Statut');
             incident.traitePar = incident.statut === 'nouveau' ? null : req.admin.id;
+            incident.traiteParProprietaire = null;
             incident.traiteLe = incident.statut === 'nouveau' ? null : new Date();
         }
         if (gravite !== undefined) incident.gravite = lireValeur(gravite, Incident.GRAVITES, 'Gravité');
         if (commentaireAdmin !== undefined) incident.commentaireAdmin = commentaireAdmin;
+        await incident.save();
+
+        await peupler(incident);
+        return res.status(200).json({ success: true, message: 'Incident mis à jour', incident });
+    } catch (error) {
+        return repondreErreur(error, res);
+    }
+};
+
+// Le propriétaire gère lui-même les incidents de ses propriétés (statut + commentaire),
+// ce qui allège le travail des administrateurs. La gravité reste fixée par l'entreprise.
+const traiterParProprietaire = async (req, res) => {
+    try {
+        verifierIdentifiant(req.params.id);
+        const { statut, commentaireProprietaire } = req.body;
+        if (statut === undefined && commentaireProprietaire === undefined) {
+            throw erreur(400, 'Rien à modifier : statut ou commentaireProprietaire');
+        }
+
+        const incident = await Incident.findById(req.params.id).populate('propriete', 'proprietaire');
+        if (!incident) throw erreur(404, 'Incident introuvable');
+        if (String(incident.propriete?.proprietaire) !== String(req.admin.id)) {
+            throw erreur(403, 'Cet incident ne concerne pas l\'une de vos propriétés');
+        }
+
+        if (statut !== undefined) {
+            incident.statut = lireValeur(statut, Incident.STATUTS, 'Statut');
+            incident.traiteParProprietaire = incident.statut === 'nouveau' ? null : req.admin.id;
+            incident.traitePar = null;
+            incident.traiteLe = incident.statut === 'nouveau' ? null : new Date();
+        }
+        if (commentaireProprietaire !== undefined) incident.commentaireProprietaire = String(commentaireProprietaire);
         await incident.save();
 
         await peupler(incident);
