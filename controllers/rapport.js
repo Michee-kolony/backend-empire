@@ -3,7 +3,7 @@ const Rapport = require('../models/rapport');
 const Presence = require('../models/presence');
 const Administrateur = require('../models/admin');
 require('../models/gardien');
-require('../models/propriete');
+const Propriete = require('../models/propriete');
 require('../models/proprietaire');
 require('../models/affectation');
 const { jourLocal, instantLocal, decalerJour } = require('../utils/horaires');
@@ -130,6 +130,39 @@ exports.mesRapports = async (req, res) => {
     }
 };
 
+// ---------- Propriétaire ----------
+
+const ROLES_PROPRIETAIRE = ['PROPRIETAIRE', 'GESTIONNAIRE', 'MANDATAIRE', 'LOCATAIRE'];
+const estProprietaire = (req) => ROLES_PROPRIETAIRE.includes(req.admin.role);
+
+// Rapports des gardiens sur les propriétés du propriétaire connecté (lecture seule).
+// Query : propriete, gardien, objet, du, au
+exports.rapportsProprietaire = async (req, res) => {
+    try {
+        if (!estProprietaire(req)) throw erreur(403, 'Action réservée aux propriétaires');
+
+        const proprietes = await Propriete.find({ proprietaire: req.admin.id }).distinct('_id');
+        const filtre = { propriete: { $in: proprietes }, ...filtrePeriode(req.query) };
+        if (req.query.propriete !== undefined) {
+            verifierIdentifiant(req.query.propriete, 'Identifiant propriete');
+            if (!proprietes.some((id) => String(id) === String(req.query.propriete))) {
+                throw erreur(403, 'Cette propriété ne vous appartient pas');
+            }
+            filtre.propriete = req.query.propriete;
+        }
+        if (req.query.gardien !== undefined) {
+            verifierIdentifiant(req.query.gardien, 'Identifiant gardien');
+            filtre.gardien = req.query.gardien;
+        }
+        if (req.query.objet !== undefined) filtre.objet = lireObjet(req.query.objet);
+
+        const rapports = await peupler(Rapport.find(filtre).sort({ createdAt: -1 }));
+        return res.status(200).json({ success: true, total: rapports.length, rapports });
+    } catch (error) {
+        return repondreErreur(error, res);
+    }
+};
+
 // ---------- Entreprise (admin) ----------
 
 // Tous les rapports. Query : gardien, propriete, objet, statut, du, au
@@ -158,7 +191,7 @@ exports.getAll = async (req, res) => {
     }
 };
 
-// Un rapport : l'admin, ou le gardien qui l'a écrit
+// Un rapport : l'admin, le gardien qui l'a écrit, ou le propriétaire de la propriété
 exports.getById = async (req, res) => {
     try {
         verifierIdentifiant(req.params.id);
@@ -167,7 +200,9 @@ exports.getById = async (req, res) => {
 
         const estAdmin = ['ADMIN', 'SUPER_ADMIN'].includes(req.admin.role);
         const estAuteur = req.admin.role === 'GARDIEN' && String(rapport.gardien?._id) === String(req.admin.id);
-        if (!estAdmin && !estAuteur) throw erreur(403, 'Accès refusé');
+        const estSonProprietaire = estProprietaire(req)
+            && String(rapport.propriete?.proprietaire?._id ?? rapport.propriete?.proprietaire) === String(req.admin.id);
+        if (!estAdmin && !estAuteur && !estSonProprietaire) throw erreur(403, 'Accès refusé');
 
         return res.status(200).json({ success: true, rapport });
     } catch (error) {

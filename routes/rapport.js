@@ -10,6 +10,9 @@ router.get('/objets', auth, rapportController.objets);
 router.post('/', auth, rapportController.ajouter);
 router.get('/mes-rapports', auth, rapportController.mesRapports);
 
+// Propriétaire : rapports des gardiens sur ses propriétés (avant "/:id")
+router.get('/proprietaire', auth, rapportController.rapportsProprietaire);
+
 // Entreprise (admin)
 router.get('/', auth, requireAdmin, rapportController.getAll);
 router.get('/:id', auth, rapportController.getById);
