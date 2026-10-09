@@ -1,24 +1,11 @@
 const http = require('http');
-const { Server } = require('socket.io');
 const app = require('./app');
-const { appendFile } = require('fs');
+const socket = require('./utils/socket');
 
 const server = http.createServer(app);
 
-const io = new Server(server, {
-    cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
-});
-
-io.on('connection', (socket) => {
-    console.log('Client connecté :', socket.id);
-
-    socket.on('disconnect', () => {
-        console.log('Client déconnecté :', socket.id);
-    });
-});
+// Socket.IO (chat en temps réel), authentifié par le même token JWT que l'API
+socket.init(server);
 
 server.listen(3000, () => {
     console.log('Serveur Socket.IO démarré sur le port 3000');
