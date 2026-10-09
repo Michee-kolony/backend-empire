@@ -91,6 +91,16 @@ const relationValide = async (a, b) => {
     return gardienTravaillePour(gardien.id, proprietaire.id);
 };
 
+// Une discussion privée reste ouverte tant que la relation existe toujours avec chaque correspondant.
+// Une fois fermée, elle reste dans la liste et consultable, mais plus personne ne peut y écrire.
+const discussionOuverte = async (conversation, u) => {
+    if (conversation.type !== 'directe') return true;
+    for (const autre of conversation.participants.filter((p) => idDe(p.utilisateur) !== u.id)) {
+        if (!autre.utilisateur || !(await relationValide(u, { id: idDe(autre.utilisateur), modele: autre.modele }))) return false;
+    }
+    return true;
+};
+
 // "membre" : peut lire et écrire ; "supervision" : super admin qui lit sans participer ; null : aucun accès
 const acces = async (u, conversation) => {
     if (conversation.type === 'propriete') {
@@ -226,6 +236,10 @@ const formaterConversation = async (conversation, u, niveau) => {
         objet.photo = autres.length === 1 ? autres[0].photo : '';
         if (niveau === 'membre') objet.interlocuteur = autres[0] ?? null;
     }
+
+    // false : la supervision, ou une discussion privée gardée en lecture seule
+    // (ex : le gardien n'est plus en service chez ce propriétaire, l'historique reste consultable)
+    objet.peutEcrire = niveau === 'membre' && await discussionOuverte(conversation, u);
 
     if (niveau === 'membre') {
         const lecture = conversation.lectures.find((l) => String(l.utilisateur) === u.id);
@@ -465,13 +479,8 @@ exports.envoyer = async (req, res) => {
         const profil = await chargerProfil(u.id, u.modele);
         if (!profil) throw erreur(401, 'Compte introuvable ou désactivé');
 
-        if (conversation.type === 'directe') {
-            const autres = conversation.participants.filter((p) => idDe(p.utilisateur) !== u.id);
-            for (const autre of autres) {
-                if (!autre.utilisateur || !(await relationValide(u, { id: idDe(autre.utilisateur), modele: autre.modele }))) {
-                    throw erreur(403, 'Cette discussion est fermée : vous n\'êtes plus lié à ce correspondant');
-                }
-            }
+        if (!(await discussionOuverte(conversation, u))) {
+            throw erreur(403, 'Cette discussion est fermée : vous n\'êtes plus lié à ce correspondant');
         }
 
         const message = await Message.create({
