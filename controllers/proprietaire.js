@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const Proprietaire = require('../models/proprietaire');
 const { JWT_SECRET } = require('../middleware/auth');
 const { supprimerDeR2 } = require('../middleware/upload');
+const { supprimerProprietesDe } = require('../utils/suppressionPropriete');
 
 const ROLES_ADMIN = ['ADMIN', 'SUPER_ADMIN'];
 
@@ -215,7 +216,8 @@ exports.modifier = async (req, res) => {
     }
 };
 
-// Supprimer un propriétaire (et sa photo de profil dans le bucket)
+// Supprimer un propriétaire avec sa photo de profil et toutes ses propriétés
+// (et tout ce qui en dépend, fichiers du bucket compris). Ses paiements sont conservés.
 exports.supprimer = async (req, res) => {
     try {
         const { id } = req.params;
@@ -232,6 +234,8 @@ exports.supprimer = async (req, res) => {
         if (!proprietaire) {
             return res.status(404).json({ success: false, message: 'Propriétaire introuvable' });
         }
+
+        await supprimerProprietesDe(proprietaire._id);
 
         try {
             await supprimerDeR2([proprietaire.photo]);

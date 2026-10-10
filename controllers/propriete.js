@@ -1,10 +1,8 @@
 const mongoose = require('mongoose');
-const Affectation = require('../models/affectation');
-const Presence = require('../models/presence');
-const Rapport = require('../models/rapport');
 const Propriete = require('../models/propriete');
 const Proprietaire = require('../models/proprietaire');
 const { supprimerDeR2 } = require('../middleware/upload');
+const { supprimerDependancesProprietes } = require('../utils/suppressionPropriete');
 
 const CHAMPS_TEXTE = [
     'nomReference', 'typeAutre', 'numeroParcelle',
@@ -75,13 +73,6 @@ const lireChamps = async (body) => {
 
 // Toutes les URLs de fichiers envoyées sur R2 pendant cette requête
 const fichiersEnvoyes = (req) => Object.values(req.fichiers || {}).flat();
-
-// Toutes les URLs de fichiers d'une propriété
-const fichiersDe = (propriete) => [
-    ...propriete.photos,
-    propriete.documentPropriete,
-    ...propriete.autresDocuments
-];
 
 const repondreErreur = (error, res) => {
     if (error.statut) {
@@ -209,7 +200,8 @@ exports.modifier = async (req, res) => {
     }
 };
 
-// Supprimer une propriété (et toutes ses photos et documents dans le bucket)
+// Supprimer une propriété avec ses affectations, présences, rapports et incidents,
+// ainsi que toutes ses photos et documents et ceux des incidents dans le bucket
 exports.supprimer = async (req, res) => {
     try {
         const { id } = req.params;
@@ -223,16 +215,7 @@ exports.supprimer = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Propriété introuvable' });
         }
 
-        // Ses affectations, présences et rapports n'ont plus de sens sans elle
-        await Affectation.deleteMany({ propriete: propriete._id });
-        await Presence.deleteMany({ propriete: propriete._id });
-        await Rapport.deleteMany({ propriete: propriete._id });
-
-        try {
-            await supprimerDeR2(fichiersDe(propriete));
-        } catch (erreur) {
-            console.error('Suppression des fichiers R2 échouée :', erreur.message);
-        }
+        await supprimerDependancesProprietes([propriete]);
 
         res.status(200).json({ success: true, message: 'Propriété supprimée avec succès' });
     } catch (error) {
