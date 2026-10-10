@@ -16,14 +16,20 @@ const CHAMPS_OBLIGATOIRES = [
 
 // Inscription d'un gardien (multipart/form-data, photo de profil dans le champ "photoProfil")
 exports.inscription = async (req, res) => {
+    // En cas d'échec, la photo déjà envoyée sur R2 est supprimée pour ne pas laisser d'orpheline
+    const refuser = (status, message) => {
+        if (req.photo) supprimerDeR2([req.photo]).catch(() => {});
+        return res.status(status).json({ success: false, message });
+    };
+
     try {
-        const manquants = CHAMPS_OBLIGATOIRES.filter((champ) => !req.body[champ]);
+        const manquants = CHAMPS_OBLIGATOIRES.filter((champ) => !String(req.body[champ] ?? '').trim());
         if (manquants.length) {
-            return res.status(400).json({ success: false, message: 'Champs obligatoires manquants : ' + manquants.join(', ') });
+            return refuser(400, 'Champs obligatoires manquants : ' + manquants.join(', '));
         }
 
         if (!req.photo) {
-            return res.status(400).json({ success: false, message: 'La photo de profil est obligatoire' });
+            return refuser(400, 'La photo de profil est obligatoire');
         }
 
         const {
@@ -32,9 +38,23 @@ exports.inscription = async (req, res) => {
             adresseActuelle, commune, quartier, avenue, statut, lat, lng
         } = req.body;
 
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+            return refuser(400, 'Adresse email invalide');
+        }
+
+        const tailleCm = Number(taille);
+        if (!Number.isFinite(tailleCm) || tailleCm < 100 || tailleCm > 250) {
+            return refuser(400, 'La taille doit être comprise entre 100 et 250 cm');
+        }
+
+        const naissance = new Date(dateNaissance);
+        if (Number.isNaN(naissance.getTime()) || naissance > new Date()) {
+            return refuser(400, 'Date de naissance invalide');
+        }
+
         const existe = await Gardien.findOne({ email: email.toLowerCase().trim() });
         if (existe) {
-            return res.status(409).json({ success: false, message: 'Cet email est déjà utilisé' });
+            return refuser(409, 'Cet email est déjà utilisé');
         }
 
         const hash = await bcrypt.hash(password, 10);
@@ -56,10 +76,14 @@ exports.inscription = async (req, res) => {
 
         res.status(201).json({ success: true, message: 'Gardien créé avec succès', gardien: data });
     } catch (error) {
-        if (error.name === 'ValidationError') {
-            return res.status(400).json({ success: false, message: error.message });
+        console.error('Inscription gardien échouée :', error);
+        if (error.code === 11000) {
+            return refuser(409, 'Cet email est déjà utilisé');
         }
-        res.status(500).json({ success: false, message: error.message });
+        if (error.name === 'ValidationError' || error.name === 'CastError') {
+            return refuser(400, error.message);
+        }
+        refuser(500, error.message);
     }
 };
 
