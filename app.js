@@ -11,6 +11,8 @@ mongoose.connect('mongodb://micheekolony71%40gmail.com:1708roosevelt@187.7.27.15
         console.log('Connexion à MongoDB réussie ✅');
         await require('./models/affectation').migrerAnciennesAffectations()
             .catch((error) => console.error('Migration des affectations échouée :', error.message));
+        await require('./utils/sousComptes').synchroniserTousLesSousComptes()
+            .catch((error) => console.error('Création des sous-comptes échouée :', error.message));
     })
     .catch((error) => console.error('Connexion à MongoDB échouée ❌ :', error.message));
 
@@ -39,6 +41,7 @@ app.use('/api/admins', require('./routes/admin'));
 app.use('/api/gardiens', require('./routes/gardien'));
 app.use('/api/proprietaires', require('./routes/proprietaire'));
 app.use('/api/proprietes', require('./routes/propriete'));
+app.use('/api/sous-comptes', require('./routes/sousCompte'));
 app.use('/api/paiements', require('./routes/paiement'));
 app.use('/api/affectations', require('./routes/affectation'));
 app.use('/api/presences', require('./routes/presence'));

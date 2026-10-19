@@ -23,6 +23,10 @@ const proprieteSchema = new mongoose.Schema(
         nombreBatiments: { type: Number, min: 0, default: null },
         nombreNiveaux: { type: Number, min: 0, default: null },
 
+        // Nombre de logements (ex : appartements d'un immeuble) : un sous-compte locataire
+        // est créé automatiquement pour chacun (voir models/sousCompte.js)
+        nombreLogements: { type: Number, min: 1, max: 500, default: 1 },
+
         // Localisation
         commune: { type: String, required: true, trim: true },
         quartier: { type: String, required: true, trim: true },

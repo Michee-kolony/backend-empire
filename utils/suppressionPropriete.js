@@ -3,6 +3,7 @@ const Incident = require('../models/incident');
 const Presence = require('../models/presence');
 const Propriete = require('../models/propriete');
 const Rapport = require('../models/rapport');
+const SousCompte = require('../models/sousCompte');
 const { supprimerDeR2 } = require('../middleware/upload');
 
 // Toutes les URLs de fichiers d'une propriété
@@ -13,7 +14,7 @@ const fichiersDe = (propriete) => [
 ];
 
 // Supprime des propriétés déjà retirées de la base avec tout ce qui en dépend :
-// affectations, présences, rapports, incidents, ainsi que leurs fichiers dans le bucket
+// affectations, présences, rapports, incidents, sous-comptes locataires, ainsi que leurs fichiers dans le bucket
 // (photos et documents des propriétés, photos et vidéos des incidents).
 // Les paiements sont conservés comme trace comptable.
 const supprimerDependancesProprietes = async (proprietes) => {
@@ -26,6 +27,7 @@ const supprimerDependancesProprietes = async (proprietes) => {
     await Presence.deleteMany({ propriete: { $in: ids } });
     await Rapport.deleteMany({ propriete: { $in: ids } });
     await Incident.deleteMany({ propriete: { $in: ids } });
+    await SousCompte.deleteMany({ propriete: { $in: ids } });
 
     const fichiers = [
         ...proprietes.flatMap(fichiersDe),

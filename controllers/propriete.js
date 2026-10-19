@@ -1,8 +1,10 @@
 const mongoose = require('mongoose');
 const Propriete = require('../models/propriete');
 const Proprietaire = require('../models/proprietaire');
+const SousCompte = require('../models/sousCompte');
 const { supprimerDeR2 } = require('../middleware/upload');
 const { supprimerDependancesProprietes } = require('../utils/suppressionPropriete');
+const { synchroniserSousComptes } = require('../utils/sousComptes');
 
 const CHAMPS_TEXTE = [
     'nomReference', 'typeAutre', 'numeroParcelle',
@@ -14,7 +16,7 @@ const CHAMPS_TEXTE = [
 const CHAMPS_CHOIX = ['typePropriete', 'niveauSecurite'];
 
 const CHAMPS_NOMBRE = [
-    'nombreBatiments', 'nombreNiveaux', 'nombreChambres', 'nombrePortesAcces',
+    'nombreBatiments', 'nombreNiveaux', 'nombreLogements', 'nombreChambres', 'nombrePortesAcces',
     'nombreVehicules', 'nombreCameras'
 ];
 
@@ -84,7 +86,11 @@ const repondreErreur = (error, res) => {
     res.status(500).json({ success: false, message: error.message });
 };
 
+// Sous-comptes locataires d'une propriété, sans les mots de passe
+const sousComptesDe = (propriete) => SousCompte.find({ propriete: propriete._id }).select('-password').sort({ numero: 1 });
+
 // Ajouter une propriété (multipart/form-data)
+// Un sous-compte locataire est créé automatiquement pour chacun des "nombreLogements" logements (1 par défaut).
 // Fichiers : "photos" (0 à 5 images), "documentPropriete" (1 PDF ou image), "autresDocuments" (0 à 5 PDF ou images)
 exports.ajouter = async (req, res) => {
     const annulerFichiers = () => supprimerDeR2(fichiersEnvoyes(req)).catch(() => {});
@@ -106,9 +112,15 @@ exports.ajouter = async (req, res) => {
         propriete.autresDocuments = req.fichiers.autresDocuments;
 
         await propriete.save();
+        await synchroniserSousComptes(propriete);
         await propriete.populate('proprietaire', '-password');
 
-        res.status(201).json({ success: true, message: 'Propriété ajoutée avec succès', propriete });
+        res.status(201).json({
+            success: true,
+            message: 'Propriété ajoutée avec succès',
+            propriete,
+            sousComptes: await sousComptesDe(propriete)
+        });
     } catch (error) {
         annulerFichiers();
         repondreErreur(error, res);
@@ -149,6 +161,7 @@ exports.getById = async (req, res) => {
 // Modifier une propriété (multipart/form-data) : seuls les champs envoyés sont modifiés.
 // Si des fichiers sont envoyés dans un champ ("photos", "documentPropriete" ou "autresDocuments"),
 // ils REMPLACENT les anciens de ce champ, qui sont supprimés du bucket.
+// Si "nombreLogements" change, les sous-comptes sont ajoutés ou retirés (seuls les logements libres peuvent l'être).
 exports.modifier = async (req, res) => {
     const annulerFichiers = () => supprimerDeR2(fichiersEnvoyes(req)).catch(() => {});
 
@@ -182,6 +195,9 @@ exports.modifier = async (req, res) => {
             propriete.autresDocuments = req.fichiers.autresDocuments;
         }
 
+        // Validation avant de toucher aux sous-comptes, pour ne pas les modifier si la propriété est refusée
+        await propriete.validate();
+        await synchroniserSousComptes(propriete);
         await propriete.save();
 
         // La modification est enregistrée : on peut supprimer les anciens fichiers remplacés
@@ -193,14 +209,19 @@ exports.modifier = async (req, res) => {
 
         await propriete.populate('proprietaire', '-password');
 
-        res.status(200).json({ success: true, message: 'Propriété modifiée avec succès', propriete });
+        res.status(200).json({
+            success: true,
+            message: 'Propriété modifiée avec succès',
+            propriete,
+            sousComptes: await sousComptesDe(propriete)
+        });
     } catch (error) {
         annulerFichiers();
         repondreErreur(error, res);
     }
 };
 
-// Supprimer une propriété avec ses affectations, présences, rapports et incidents,
+// Supprimer une propriété avec ses affectations, présences, rapports, incidents et sous-comptes locataires,
 // ainsi que toutes ses photos et documents et ceux des incidents dans le bucket
 exports.supprimer = async (req, res) => {
     try {
