@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 // Sous-compte locataire : un par logement d'une propriété (ex : 1 immeuble de 8 appartements = 8 sous-comptes).
 // Ils sont créés automatiquement à partir de "nombreLogements" de la propriété (voir utils/sousComptes.js).
 // Seul le propriétaire y inscrit ou en retire un locataire ; l'administration les consulte.
-// Le locataire n'a pas d'identifiants : il ne se connecte pas, seul le propriétaire se connecte.
+// S'il renseigne un email et un mot de passe, le locataire reçoit un compte de connexion
+// (models/locataire.js) pour discuter avec lui et avec les gardiens de la propriété.
 const sousCompteSchema = new mongoose.Schema(
     {
         // Compte principal auquel ce sous-compte est rattaché
@@ -20,7 +21,10 @@ const sousCompteSchema = new mongoose.Schema(
         prenom: { type: String, trim: true },
         // Simple contact, facultatif
         telephone: { type: String, trim: true },
-        dateEntree: { type: Date }
+        dateEntree: { type: Date },
+
+        // Compte de connexion du locataire (absent : le locataire n'a pas accès à l'application)
+        locataire: { type: mongoose.Schema.Types.ObjectId, ref: 'Locataire', default: undefined }
     },
     {
         timestamps: true,

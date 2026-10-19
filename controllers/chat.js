@@ -6,17 +6,19 @@ const Affectation = require('../models/affectation');
 const Gardien = require('../models/gardien');
 const Proprietaire = require('../models/proprietaire');
 const Administrateur = require('../models/admin');
+const Locataire = require('../models/locataire');
 const { supprimerDeR2 } = require('../middleware/upload');
 const socket = require('../utils/socket');
 
 const ROLES_ADMIN = ['ADMIN', 'SUPER_ADMIN'];
 const ROLES_PROPRIETAIRE = ['PROPRIETAIRE', 'GESTIONNAIRE', 'MANDATAIRE', 'LOCATAIRE'];
 
-const MODELES = { Gardien, Proprietaire, Administrateur };
+const MODELES = { Gardien, Proprietaire, Administrateur, Locataire };
 const CHAMPS_PROFIL = {
     Gardien: 'nom postnom prenom photoProfil matricule',
     Proprietaire: 'nom postnom prenom photo role actif',
-    Administrateur: 'nom role actif'
+    Administrateur: 'nom role actif',
+    Locataire: 'nom postnom prenom photo role actif'
 };
 const CHAMPS_PARTICIPANT = 'nom postnom prenom photo photoProfil role matricule';
 // Valeurs acceptées pour "destinataireModele"
@@ -24,7 +26,8 @@ const NOMS_MODELES = {
     gardien: 'Gardien',
     proprietaire: 'Proprietaire',
     administrateur: 'Administrateur',
-    admin: 'Administrateur'
+    admin: 'Administrateur',
+    locataire: 'Locataire'
 };
 
 const LIMITE_MESSAGES = 50;
@@ -51,7 +54,9 @@ const enCours = () => Affectation.filtreStatut('en cours');
 // Utilisateur connecté : { id, role, modele }
 const lireUtilisateur = (jeton) => {
     let modele = null;
-    if (jeton?.role === 'GARDIEN') modele = 'Gardien';
+    // Token locataire : { compte: 'Locataire', role: 'LOCATAIRE' } (à tester avant les rôles propriétaire)
+    if (jeton?.compte === 'Locataire') modele = 'Locataire';
+    else if (jeton?.role === 'GARDIEN') modele = 'Gardien';
     else if (ROLES_PROPRIETAIRE.includes(jeton?.role)) modele = 'Proprietaire';
     else if (ROLES_ADMIN.includes(jeton?.role)) modele = 'Administrateur';
     if (!modele) throw erreur(403, 'Accès refusé');
@@ -81,9 +86,31 @@ const gardienTravaillePour = async (gardienId, proprietaireId) => {
     return Boolean(await Affectation.exists({ gardien: gardienId, propriete: { $in: proprietes }, ...enCours() }));
 };
 
+// Propriété où loge le locataire (null si son compte a été supprimé ou désactivé)
+const proprieteDuLocataire = async (locataireId) => {
+    if (!mongoose.Types.ObjectId.isValid(locataireId)) return null;
+    const locataire = await Locataire.findById(locataireId).select('propriete actif').lean();
+    return locataire?.actif ? String(locataire.propriete) : null;
+};
+
 // Deux personnes peuvent-elles discuter en privé ?
-// Admin <-> tout le monde ; gardien <-> propriétaire seulement si le gardien est en service chez lui.
+// - locataire <-> propriétaire de sa propriété, ou gardien en service sur sa propriété (rien d'autre)
+// - admin <-> tout le monde (sauf les locataires)
+// - gardien <-> propriétaire seulement si le gardien est en service chez lui
 const relationValide = async (a, b) => {
+    const locataire = [a, b].find((p) => p.modele === 'Locataire');
+    if (locataire) {
+        const autre = locataire === a ? b : a;
+        const proprieteId = await proprieteDuLocataire(locataire.id);
+        if (!proprieteId) return false;
+        if (autre.modele === 'Proprietaire') {
+            return Boolean(await Propriete.exists({ _id: proprieteId, proprietaire: autre.id }));
+        }
+        if (autre.modele === 'Gardien') {
+            return Boolean(await Affectation.exists({ gardien: autre.id, propriete: proprieteId, ...enCours() }));
+        }
+        return false;
+    }
     if (a.modele === 'Administrateur' || b.modele === 'Administrateur') return true;
     const gardien = [a, b].find((p) => p.modele === 'Gardien');
     const proprietaire = [a, b].find((p) => p.modele === 'Proprietaire');
@@ -275,11 +302,52 @@ exports.signalerEcriture = async (jeton, conversationId) => {
 
 // ---------- Routes ----------
 
+// Locataires (compte actif) des propriétés indiquées : [{ _id, nomReference }]
+const contactsLocataires = async (proprietes) => {
+    const locataires = await Locataire.find({ propriete: { $in: proprietes.map((p) => p._id) }, actif: true })
+        .select('nom postnom prenom photo role propriete sousCompte')
+        .populate('sousCompte', 'libelle');
+    return locataires.map((l) => {
+        const propriete = proprietes.find((p) => String(p._id) === String(l.propriete));
+        return {
+            id: String(l._id), modele: 'Locataire', nom: nomComplet(l), role: 'LOCATAIRE', photo: l.photo || '',
+            logement: l.sousCompte?.libelle ?? '',
+            propriete: { id: String(l.propriete), nomReference: propriete?.nomReference ?? '' }
+        };
+    });
+};
+
 // Personnes avec qui l'utilisateur peut ouvrir une discussion privée
 exports.contacts = async (req, res) => {
     try {
         const u = lireUtilisateur(req.admin);
         const contacts = [];
+
+        if (u.modele === 'Locataire') {
+            // Son propriétaire et les gardiens en service sur sa propriété (pas l'administration)
+            const proprieteId = await proprieteDuLocataire(u.id);
+            const propriete = proprieteId
+                ? await Propriete.findById(proprieteId).select('nomReference proprietaire').populate('proprietaire', 'nom postnom prenom photo role actif')
+                : null;
+            if (propriete) {
+                const infos = { id: String(propriete._id), nomReference: propriete.nomReference };
+                const p = propriete.proprietaire;
+                if (p && p.actif !== false) {
+                    contacts.push({ id: String(p._id), modele: 'Proprietaire', nom: nomComplet(p), role: p.role, photo: p.photo || '', propriete: infos });
+                }
+                const affectations = await Affectation.find({ propriete: propriete._id, ...enCours() })
+                    .select('gardien role')
+                    .populate('gardien', 'nom postnom prenom photoProfil matricule');
+                for (const a of affectations) {
+                    if (!a.gardien) continue;
+                    contacts.push({
+                        id: String(a.gardien._id), modele: 'Gardien', nom: nomComplet(a.gardien), role: 'GARDIEN',
+                        photo: a.gardien.photoProfil || '', matricule: a.gardien.matricule, roleAffectation: a.role, propriete: infos
+                    });
+                }
+            }
+            return res.status(200).json({ success: true, total: contacts.length, contacts });
+        }
 
         if (u.modele === 'Gardien') {
             const proprietes = await Propriete.find({
@@ -293,6 +361,7 @@ exports.contacts = async (req, res) => {
                     photo: p.photo || '', propriete: { id: String(propriete._id), nomReference: propriete.nomReference }
                 });
             }
+            contacts.push(...await contactsLocataires(proprietes));
         } else if (u.modele === 'Proprietaire') {
             const proprietes = await Propriete.find({ proprietaire: u.id }).select('nomReference');
             const affectations = await Affectation.find({ propriete: { $in: proprietes.map((p) => p._id) }, ...enCours() })
@@ -307,6 +376,7 @@ exports.contacts = async (req, res) => {
                     propriete: { id: String(a.propriete), nomReference: propriete?.nomReference ?? '' }
                 });
             }
+            contacts.push(...await contactsLocataires(proprietes));
         }
 
         const admins = await Administrateur.find({ actif: true, _id: { $ne: u.id } }).select('nom role');
@@ -328,7 +398,7 @@ exports.mesConversations = async (req, res) => {
 
         if (estAdmin(u)) {
             conditions.push({ type: 'propriete' });
-        } else {
+        } else if (u.modele !== 'Locataire') { // le locataire n'a que des discussions privées
             const proprietes = u.modele === 'Gardien'
                 ? await Affectation.distinct('propriete', { gardien: u.id, ...enCours() })
                 : await Propriete.distinct('_id', { proprietaire: u.id });

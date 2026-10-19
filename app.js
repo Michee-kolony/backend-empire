@@ -42,6 +42,7 @@ app.use('/api/gardiens', require('./routes/gardien'));
 app.use('/api/proprietaires', require('./routes/proprietaire'));
 app.use('/api/proprietes', require('./routes/propriete'));
 app.use('/api/sous-comptes', require('./routes/sousCompte'));
+app.use('/api/locataires', require('./routes/locataire'));
 app.use('/api/paiements', require('./routes/paiement'));
 app.use('/api/affectations', require('./routes/affectation'));
 app.use('/api/presences', require('./routes/presence'));

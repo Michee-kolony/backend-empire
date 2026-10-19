@@ -2,10 +2,10 @@ const mongoose = require('mongoose');
 
 const TYPES = {
     propriete: 'Discussion de la propriété', // propriétaire + gardiens affectés + administrateurs
-    directe: 'Discussion privée'             // entre deux personnes
+    directe: 'Discussion privée'             // entre deux personnes (dont locataire <-> propriétaire / gardien)
 };
 
-const MODELES = ['Gardien', 'Proprietaire', 'Administrateur'];
+const MODELES = ['Gardien', 'Proprietaire', 'Administrateur', 'Locataire'];
 
 // Conversation du chat.
 // - "propriete" : une seule par propriété. Les membres ne sont pas stockés, ils sont recalculés à chaque

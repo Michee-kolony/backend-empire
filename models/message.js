@@ -13,7 +13,7 @@ const messageSchema = new mongoose.Schema(
         conversation: { type: mongoose.Schema.Types.ObjectId, ref: 'Conversation', required: true, immutable: true },
 
         auteur: { type: mongoose.Schema.Types.ObjectId, refPath: 'auteurModele', required: true, immutable: true },
-        auteurModele: { type: String, enum: ['Gardien', 'Proprietaire', 'Administrateur'], required: true, immutable: true },
+        auteurModele: { type: String, enum: ['Gardien', 'Proprietaire', 'Administrateur', 'Locataire'], required: true, immutable: true },
         // Copie du nom, du rôle et de la photo au moment de l'envoi
         auteurNom: { type: String, required: true, trim: true },
         auteurRole: { type: String, required: true },
