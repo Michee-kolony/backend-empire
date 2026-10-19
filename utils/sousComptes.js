@@ -18,7 +18,7 @@ const synchroniserSousComptes = async (propriete) => {
     const existants = await SousCompte.find({ propriete: propriete._id });
 
     const enTrop = existants.filter((s) => s.numero > total);
-    const occupes = enTrop.filter((s) => s.telephone);
+    const occupes = enTrop.filter((s) => s.nom);
     if (occupes.length) {
         throw erreur400(
             `Impossible de réduire à ${total} logement(s) : ${occupes.map((s) => s.libelle).join(', ')} ` +
@@ -50,8 +50,15 @@ const synchroniserSousComptes = async (propriete) => {
     );
 };
 
-// Au démarrage : crée les sous-comptes des propriétés enregistrées avant cette fonctionnalité
+// Au démarrage : aligne les index sur le modèle (retire les anciens index uniques téléphone / email
+// de la version avec identifiants) et crée les sous-comptes des propriétés enregistrées avant cette fonctionnalité
 const synchroniserTousLesSousComptes = async () => {
+    await SousCompte.syncIndexes();
+    // Anciens identifiants de connexion des locataires : plus utilisés
+    await SousCompte.collection.updateMany(
+        { $or: [{ password: { $exists: true } }, { email: { $exists: true } }, { actif: { $exists: true } }] },
+        { $unset: { password: '', email: '', actif: '' } }
+    );
     const proprietes = await Propriete.find().select('proprietaire typePropriete nombreLogements');
     for (const propriete of proprietes) {
         await synchroniserSousComptes(propriete).catch((error) =>
