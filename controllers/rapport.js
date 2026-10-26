@@ -7,6 +7,7 @@ const Propriete = require('../models/propriete');
 require('../models/proprietaire');
 require('../models/affectation');
 const { jourLocal, instantLocal, decalerJour } = require('../utils/horaires');
+const socket = require('../utils/socket');
 
 // Un rapport peut être écrit pendant le service ou jusqu'à 24 h après sa fin
 const DELAI_RAPPORT_HEURES = Number(process.env.RAPPORT_DELAI_HEURES ?? 24);
@@ -110,6 +111,8 @@ exports.ajouter = async (req, res) => {
         });
 
         await peupler(rapport);
+        // Notification en temps réel de tous les administrateurs
+        socket.emettre([socket.SALON_ADMINS], 'rapport:nouveau', { rapport: rapport.toJSON() });
         return res.status(201).json({ success: true, message: 'Rapport envoyé', rapport });
     } catch (error) {
         return repondreErreur(error, res);

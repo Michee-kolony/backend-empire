@@ -186,14 +186,21 @@ const formaterMessage = (message, supervision) => {
     return objet;
 };
 
-// Prévient en temps réel tous les membres (et la supervision) d'un changement sur un message
+// Prévient en temps réel tous les membres (et la supervision) d'un changement sur un message.
+// "type" et "participants" (discussion privée) permettent au client de savoir s'il est membre
+// ou s'il ne reçoit le message qu'au titre de la supervision (pas de notification dans ce cas).
 const diffuserMessage = async (conversation, evenement, message) => {
     const salons = await salonsDe(conversation);
+    const contexte = {
+        conversation: String(conversation._id),
+        type: conversation.type,
+        participants: conversation.type === 'directe' ? conversation.participants.map((p) => String(idDe(p.utilisateur))) : []
+    };
     socket.emettre(
         salons,
         evenement,
-        { conversation: String(conversation._id), message: formaterMessage(message, false) },
-        { conversation: String(conversation._id), message: formaterMessage(message, true) }
+        { ...contexte, message: formaterMessage(message, false) },
+        { ...contexte, message: formaterMessage(message, true) }
     );
 };
 
