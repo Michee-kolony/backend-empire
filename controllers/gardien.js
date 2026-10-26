@@ -5,6 +5,7 @@ const Affectation = require('../models/affectation');
 const Presence = require('../models/presence');
 const Rapport = require('../models/rapport');
 const Gardien = require('../models/gardien');
+const Evaluation = require('../models/evaluation');
 const { JWT_SECRET } = require('../middleware/auth');
 const { supprimerDeR2 } = require('../middleware/upload');
 
@@ -309,6 +310,57 @@ exports.ajouterCommentaire = async (req, res) => {
         }
 
         res.status(201).json({ success: true, message: 'Commentaire ajouté', commentaires: gardien.commentaires });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Tous les avis sur un gardien (admin) : commentaires des propriétaires + évaluations mensuelles
+// Query facultative : periode (AAAA-MM), auteur (proprietaire | gardien) pour filtrer les évaluations
+exports.getAvis = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, message: 'Identifiant invalide' });
+        }
+
+        const gardien = await Gardien.findById(id).select('matricule nom postnom prenom photoProfil commentaires');
+        if (!gardien) {
+            return res.status(404).json({ success: false, message: 'Gardien introuvable' });
+        }
+
+        const filtre = { gardien: id };
+        if (req.query.periode !== undefined && req.query.periode !== '') {
+            if (!Evaluation.FORMAT_PERIODE.test(String(req.query.periode))) {
+                return res.status(400).json({ success: false, message: 'Période au format AAAA-MM (ex : 2026-10)' });
+            }
+            filtre.periode = String(req.query.periode);
+        }
+        if (req.query.auteur !== undefined) {
+            const auteur = String(req.query.auteur).toLowerCase();
+            if (!['proprietaire', 'gardien'].includes(auteur)) {
+                return res.status(400).json({ success: false, message: 'auteur invalide : proprietaire ou gardien' });
+            }
+            filtre.auteurModele = auteur === 'gardien' ? 'Gardien' : 'Proprietaire';
+        }
+
+        const evaluations = await Evaluation.find(filtre)
+            .populate({ path: 'propriete', select: 'nomReference commune quartier avenue numero' })
+            .populate({ path: 'proprietaire', select: 'nom postnom prenom photo role' })
+            .sort({ periode: -1, createdAt: -1 });
+
+        const commentaires = [...gardien.commentaires].sort((a, b) => b.dateAjout - a.dateAjout);
+        const { commentaires: _, ...infos } = gardien.toObject();
+
+        res.status(200).json({
+            success: true,
+            gardien: infos,
+            totalCommentaires: commentaires.length,
+            totalEvaluations: evaluations.length,
+            commentaires,
+            evaluations
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

@@ -10,6 +10,7 @@ router.post('/login', gardienController.login);
 router.patch('/position', auth, gardienController.mettreAJourPosition);
 router.get('/', auth, gardienController.getAll);
 router.get('/:id', auth, gardienController.getById);
+router.get('/:id/avis', auth, requireAdmin, gardienController.getAvis);
 router.put('/:id', auth, requireSuperAdmin, uploadPhoto('photo-gardien', 'photoProfil'), gardienController.modifier);
 router.patch('/:id/statut', auth, gardienController.changerStatut);
 router.post('/:id/commentaires', auth, uploadPhoto('photo-proprietaire', 'photoProprietaire'), gardienController.ajouterCommentaire);
